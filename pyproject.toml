@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "fisheye-ui"
+version = "0.1.0"
+description = "UI for FishEye"
+authors = ["Madison Van Horn <67763032+madivanhorn@users.noreply.github.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fisheye = {git = "https://github.com/fisheye-sonar/fisheye.git"}
+fastapi = {extras = ["standard"], version = "^0.138.0"}
+pydantic = "^2.13.4"
+setuptools = "<72"
+
+
+[tool.poetry.scripts]
+fisheye-ui = "fisheye_ui.app:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

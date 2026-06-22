@@ -1,0 +1,25 @@
+# FishEye UI
+
+A web-based UI for running [FishEye](https://github.com/fisheye-sonar/fisheye/tree/main/fisheye) fish counting inference on ARIS sonar files. Submit a file and pipeline configuration, monitor progress, and download results from your browser.
+
+## Requirements
+
+- Python 3.10+
+- [Poetry](https://python-poetry.org/)
+
+## Setup
+
+```bash
+poetry install
+pyenv rehash  # if using pyenv, required to register the fisheye-ui command
+```
+
+## To Run
+
+```bash
+fisheye-ui
+```
+
+## License
+
+MIT
