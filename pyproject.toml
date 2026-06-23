@@ -17,6 +17,9 @@ setuptools = "<72"
 [tool.poetry.scripts]
 fisheye-ui = "fisheye_ui.app:main"
 
+[tool.poetry.group.dev.dependencies]
+black = "^26.5.1"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
