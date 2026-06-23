@@ -1,8 +1,10 @@
+import queue
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
+import structlog
 from fisheye.common.system import generate_job_id
 from fisheye.runner import run_job
 from omegaconf import DictConfig, OmegaConf
@@ -21,6 +23,9 @@ class Job:
     output_dir: Optional[str] = None
     results: Optional[List] = None
     error: Optional[str] = None
+    progress_queue: queue.Queue = field(
+        default_factory=lambda: queue.Queue(maxsize=100), repr=False
+    )
     _thread: Optional[threading.Thread] = field(default=None, repr=False)
     _cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
 
@@ -63,6 +68,10 @@ class JobManager:
         """Retrieve a job by its ID."""
         return self._jobs.get(job_id)
 
+    def get_job_queue(self, job_id: str) -> Optional[queue.Queue]:
+        job = self._jobs.get(job_id)
+        return job.progress_queue if job is not None else None
+
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a job by its ID. Will cancel job once current one complete."""
         job = self._jobs.get(job_id)
@@ -74,12 +83,15 @@ class JobManager:
 
     def _run(self, job: Job) -> None:
         """Run the job."""
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(job_id=job.id)
+
         if job._cancel_event.is_set():
             return
 
         job.status = JobStatus.RUNNING
         try:
-            results = run_job(job.config, job_id=job.id)
+            results = run_job(job.config, job_id=job.id, configure_logging=False)
             if job._cancel_event.is_set():
                 job.status = JobStatus.CANCELLED
             else:

@@ -1,11 +1,22 @@
 import threading
 import webbrowser
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-app = FastAPI(title="FishEye UI")
+from fisheye_ui.job_manager import job_manager
+from fisheye_ui.logging import configure_logging
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_logging(job_manager.get_job_queue)
+    yield
+
+
+app = FastAPI(title="FishEye UI", lifespan=lifespan)
 
 
 @app.get("/", response_class=HTMLResponse)
