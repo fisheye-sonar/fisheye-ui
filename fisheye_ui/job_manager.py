@@ -26,9 +26,7 @@ class Job:
     output_dir: Optional[str] = None
     results: Optional[List] = None
     error: Optional[str] = None
-    progress_queue: queue.Queue = field(
-        default_factory=lambda: queue.Queue(maxsize=100), repr=False
-    )
+    progress_queue: Optional[Any] = field(default=None, repr=False)
     _process: Optional[multiprocessing.Process] = field(default=None, repr=False)
 
 
@@ -53,6 +51,7 @@ class JobManager:
             created_at=datetime.utcnow(),
             config=config_dict,
             output_dir=config_dict.get("output_dir"),
+            progress_queue=multiprocessing.get_context("spawn").Queue(maxsize=100),
         )
 
         with self._lock:
@@ -67,7 +66,7 @@ class JobManager:
         """Retrieve a job by its ID."""
         return self._jobs.get(job_id)
 
-    def get_job_queue(self, job_id: str) -> Optional[queue.Queue]:
+    def get_job_queue(self, job_id: str) -> Optional[Any]:
         job = self._jobs.get(job_id)
         return job.progress_queue if job is not None else None
 
@@ -85,7 +84,7 @@ class JobManager:
         return True
 
     def _run(self, job: Job) -> None:
-        """Monitor a job subprocess and update status when it finishes."""
+        """Monitor a job subprocess and update status whwhaten it finishes."""
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(job_id=job.id)
 
@@ -98,10 +97,10 @@ class JobManager:
             return
 
         ctx = multiprocessing.get_context("spawn")
-        result_queue: multiprocessing.Queue = ctx.Queue()
+        result_queue = ctx.Queue()
         process = ctx.Process(
             target=_run_job_subprocess,
-            args=(job.config, job.id, result_queue),
+            args=(job.config, job.id, result_queue, job.progress_queue),
             daemon=True,
         )
         job._process = process
@@ -122,19 +121,28 @@ class JobManager:
 
         if success:
             job.results = _read_summary_csv(output_dir, job.id)
-            job.status = JobStatus.COMPLETED
+            if job.results is None:
+                job.error = "No files were processed. Output files may already exist in the output directory."
+                job.status = JobStatus.FAILED
+            else:
+                job.status = JobStatus.COMPLETED
         else:
             job.error = error
             job.status = JobStatus.FAILED
 
 
 def _run_job_subprocess(
-    config: dict, job_id: str, result_queue: multiprocessing.Queue
+    config: dict,
+    job_id: str,
+    result_queue: multiprocessing.Queue,
+    progress_queue: multiprocessing.Queue,
 ) -> None:
     """Entry point for the job subprocess."""
     try:
+        from fisheye.common.logging import progress_queue as pq_var
         from fisheye.runner import run_job
 
+        pq_var.set(progress_queue)
         run_job(config, job_id=job_id, configure_logging=True)
         result_queue.put((True, None))
     except Exception as e:
