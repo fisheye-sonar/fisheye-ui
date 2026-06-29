@@ -84,7 +84,7 @@ class JobManager:
         return True
 
     def _run(self, job: Job) -> None:
-        """Monitor a job subprocess and update status whwhaten it finishes."""
+        """Monitor a job subprocess and update status when it finishes."""
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(job_id=job.id)
 
