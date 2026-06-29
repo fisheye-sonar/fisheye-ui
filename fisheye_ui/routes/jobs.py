@@ -1,8 +1,12 @@
+import asyncio
+import json
+import queue
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
+from fisheye_ui.enums import JobStatus
 from fisheye_ui.job_manager import job_manager
 from fisheye_ui.schemas import (
     JobCreateRequest,
@@ -61,6 +65,36 @@ async def list_outputs(job_id: str):
         if f.is_file()
     ]
     return OutputListResponse(files=files)
+
+
+@router.websocket("/{job_id}/stream")
+async def stream_job_progress(websocket: WebSocket, job_id: str):
+    job = job_manager.get_job(job_id)
+    if job is None:
+        await websocket.close(code=4004)
+        return
+
+    await websocket.accept()
+    loop = asyncio.get_running_loop()
+
+    try:
+        while True:
+            try:
+                event = await loop.run_in_executor(
+                    None, lambda: job.progress_queue.get(timeout=0.5)
+                )
+                await websocket.send_text(json.dumps(event, default=str))
+            except queue.Empty:
+                if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                    break
+
+        await websocket.send_text(
+            json.dumps(
+                {"event": "done", "status": job.status.value, "error": job.error}
+            )
+        )
+    except WebSocketDisconnect:
+        pass
 
 
 @router.get("/{job_id}/outputs/{filename}")
