@@ -1,12 +1,15 @@
+import csv
+import glob
+import multiprocessing
 import queue
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import structlog
 from fisheye.common.system import generate_job_id
-from fisheye.runner import run_job
 from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
@@ -26,8 +29,7 @@ class Job:
     progress_queue: queue.Queue = field(
         default_factory=lambda: queue.Queue(maxsize=100), repr=False
     )
-    _thread: Optional[threading.Thread] = field(default=None, repr=False)
-    _cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    _process: Optional[multiprocessing.Process] = field(default=None, repr=False)
 
 
 class JobManager:
@@ -53,13 +55,10 @@ class JobManager:
             output_dir=config_dict.get("output_dir"),
         )
 
-        # avoid race condition
         with self._lock:
             self._jobs[job_id] = job
 
-        # start job in a separate thread so that it doesn't block the server from shutting down
         thread = threading.Thread(target=self._run, args=(job,), daemon=True)
-        job._thread = thread
         thread.start()
 
         return job_id
@@ -73,35 +72,81 @@ class JobManager:
         return job.progress_queue if job is not None else None
 
     def cancel_job(self, job_id: str) -> bool:
-        """Cancel a job by its ID. Will cancel job once current one complete."""
+        """Cancel a running job by terminating its subprocess."""
         job = self._jobs.get(job_id)
         if job is None or job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
             return False
-        job._cancel_event.set()
         job.status = JobStatus.CANCELLED
+        if job._process and job._process.is_alive():
+            job._process.terminate()
+            job._process.join(timeout=5)
+            if job._process.is_alive():
+                job._process.kill()
         return True
 
     def _run(self, job: Job) -> None:
-        """Run the job."""
+        """Monitor a job subprocess and update status when it finishes."""
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(job_id=job.id)
 
-        if job._cancel_event.is_set():
+        output_dir = job.config.get("output_dir") or str(
+            Path(job.config["input_path"]).parent
+        )
+        job.output_dir = output_dir
+
+        if job.status == JobStatus.CANCELLED:
             return
 
-        job.status = JobStatus.RUNNING
-        try:
-            results = run_job(job.config, job_id=job.id, configure_logging=False)
-            if job._cancel_event.is_set():
-                job.status = JobStatus.CANCELLED
-            else:
-                job.results = results
-                job.status = JobStatus.COMPLETED
+        ctx = multiprocessing.get_context("spawn")
+        result_queue: multiprocessing.Queue = ctx.Queue()
+        process = ctx.Process(
+            target=_run_job_subprocess,
+            args=(job.config, job.id, result_queue),
+            daemon=True,
+        )
+        job._process = process
 
-        except Exception as e:
-            if not job._cancel_event.is_set():
-                job.error = str(e)
-                job.status = JobStatus.FAILED
+        job.status = JobStatus.RUNNING
+        process.start()
+        process.join()
+
+        if job.status == JobStatus.CANCELLED:
+            return
+
+        try:
+            success, error = result_queue.get_nowait()
+        except queue.Empty:
+            job.error = "Job process ended unexpectedly"
+            job.status = JobStatus.FAILED
+            return
+
+        if success:
+            job.results = _read_summary_csv(output_dir, job.id)
+            job.status = JobStatus.COMPLETED
+        else:
+            job.error = error
+            job.status = JobStatus.FAILED
+
+
+def _run_job_subprocess(
+    config: dict, job_id: str, result_queue: multiprocessing.Queue
+) -> None:
+    """Entry point for the job subprocess."""
+    try:
+        from fisheye.runner import run_job
+
+        run_job(config, job_id=job_id, configure_logging=True)
+        result_queue.put((True, None))
+    except Exception as e:
+        result_queue.put((False, str(e)))
+
+
+def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:
+    matches = glob.glob(str(Path(output_dir) / f"*{job_id}_summary.csv"))
+    if not matches:
+        return None
+    with open(matches[0], newline="") as f:
+        return list(csv.DictReader(f))
 
 
 job_manager = JobManager()
