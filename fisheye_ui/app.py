@@ -8,15 +8,18 @@ from fastapi.responses import HTMLResponse
 
 from fisheye_ui.job_manager import job_manager
 from fisheye_ui.logging import configure_logging
+from fisheye_ui.routes.jobs import router as jobs_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Configure logging and job manager at server startup."""
     configure_logging(job_manager.get_job_queue)
     yield
 
 
 app = FastAPI(title="FishEye UI", lifespan=lifespan)
+app.include_router(jobs_router)
 
 
 @app.get("/", response_class=HTMLResponse)

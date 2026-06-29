@@ -12,6 +12,8 @@ fisheye = {git = "https://github.com/fisheye-sonar/fisheye.git"}
 fastapi = {extras = ["standard"], version = "^0.138.0"}
 pydantic = "^2.13.4"
 setuptools = "<72"
+torch = "2.6.0"
+ultralytics = "8.3.74"
 
 
 [tool.poetry.scripts]
