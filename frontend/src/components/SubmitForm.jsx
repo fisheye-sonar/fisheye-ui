@@ -27,6 +27,7 @@ const EXPORT_OPTIONS = [
 
 export default function SubmitForm({ onJobCreated }) {
   const [inputPath, setInputPath] = useState('')
+  const [dragOver, setDragOver] = useState(false)
   const [weightsPath, setWeightsPath] = useState('')
   const [device, setDevice] = useState('mps')
   const [platformConfig, setPlatformConfig] = useState(PLATFORM_PRESETS.mps.dataset)
@@ -45,6 +46,20 @@ export default function SubmitForm({ onJobCreated }) {
   const [outputDir, setOutputDir] = useState('')
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
+  const [picking, setPicking] = useState(null)
+
+  async function browsePath(type) {
+    setPicking(type)
+    try {
+      const endpoint = type === 'directory' ? '/files/pick-directory' : '/files/pick-file'
+      const res = await fetch(endpoint)
+      if (!res.ok) return
+      const { path } = await res.json()
+      if (path) setInputPath(path)
+    } finally {
+      setPicking(null)
+    }
+  }
 
   function toggleExport(value) {
     setExportOptions(prev =>
@@ -98,15 +113,65 @@ export default function SubmitForm({ onJobCreated }) {
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ARIS file path</label>
-            <input
-              type="text"
-              required
-              value={inputPath}
-              onChange={e => setInputPath(e.target.value)}
-              placeholder="/path/to/file.aris"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Input file or folder</label>
+            <div
+              onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={e => { e.preventDefault(); setDragOver(false) }}
+              className={`border-2 border-dashed rounded-xl transition-colors ${
+                dragOver
+                  ? 'border-blue-400 bg-blue-50'
+                  : inputPath
+                    ? 'border-gray-200 bg-white'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+              }`}
+            >
+              {inputPath ? (
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span className="flex-1 text-sm text-gray-800 font-mono truncate min-w-0">{inputPath}</span>
+                  <button
+                    type="button"
+                    onClick={() => setInputPath('')}
+                    className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label="Clear selection"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <div className="py-8 px-4 text-center">
+                  <svg className="mx-auto w-8 h-8 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <p className="text-sm text-gray-500">Drop a file or folder here</p>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-4">ARIS or DDF files, or a folder containing them</p>
+                  <div className="flex gap-2 justify-center">
+                    <button
+                      type="button"
+                      onClick={() => browsePath('file')}
+                      disabled={!!picking}
+                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
+                    >
+                      {picking === 'file' ? 'Opening…' : 'Select file'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => browsePath('directory')}
+                      disabled={!!picking}
+                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
+                    >
+                      {picking === 'directory' ? 'Opening…' : 'Select folder'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <input type="text" required value={inputPath} onChange={() => {}} className="sr-only" tabIndex={-1} aria-hidden="true" />
           </div>
 
           <div>

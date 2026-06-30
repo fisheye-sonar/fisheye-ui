@@ -2,6 +2,7 @@ import csv
 import glob
 import multiprocessing
 import queue
+import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -13,6 +14,12 @@ from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
+
+if sys.platform != "win32":
+    multiprocessing.set_forkserver_preload(["fisheye", "torch", "ultralytics"])
+    _MP_CTX = multiprocessing.get_context("forkserver")
+else:
+    _MP_CTX = multiprocessing.get_context("spawn")
 
 
 @dataclass
@@ -51,7 +58,7 @@ class JobManager:
             created_at=datetime.utcnow(),
             config=config_dict,
             output_dir=config_dict.get("output_dir"),
-            progress_queue=multiprocessing.get_context("spawn").Queue(maxsize=100),
+            progress_queue=_MP_CTX.Queue(maxsize=100),
         )
 
         with self._lock:
@@ -96,9 +103,8 @@ class JobManager:
         if job.status == JobStatus.CANCELLED:
             return
 
-        ctx = multiprocessing.get_context("spawn")
-        result_queue = ctx.Queue()
-        process = ctx.Process(
+        result_queue = _MP_CTX.Queue()
+        process = _MP_CTX.Process(
             target=_run_job_subprocess,
             args=(job.config, job.id, result_queue, job.progress_queue),
             daemon=True,
@@ -129,6 +135,10 @@ class JobManager:
         else:
             job.error = error
             job.status = JobStatus.FAILED
+
+
+def _noop() -> None:
+    pass
 
 
 def _run_job_subprocess(
