@@ -1,30 +1,34 @@
 import threading
 import webbrowser
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import uvicorn
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from fisheye_ui.job_manager import job_manager
 from fisheye_ui.logging import configure_logging
 from fisheye_ui.routes.jobs import router as jobs_router
 
+STATIC_DIR = Path(__file__).parent / "static"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Configure logging and job manager at server startup."""
     configure_logging(job_manager.get_job_queue)
     yield
 
 
 app = FastAPI(title="FishEye UI", lifespan=lifespan)
 app.include_router(jobs_router)
+app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 async def index():
-    return "<h1>FishEye UI</h1><p>Server is running.</p>"
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 def main():
