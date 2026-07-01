@@ -1,4 +1,3 @@
-import sys
 import threading
 import webbrowser
 from contextlib import asynccontextmanager
@@ -9,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from fisheye_ui.job_manager import _MP_CTX, _noop, job_manager
+from fisheye_ui.job_manager import _worker_pool, job_manager
 from fisheye_ui.logging import configure_logging
 from fisheye_ui.routes.files import router as files_router
 from fisheye_ui.routes.jobs import router as jobs_router
@@ -17,17 +16,10 @@ from fisheye_ui.routes.jobs import router as jobs_router
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def _warmup_forkserver() -> None:
-    p = _MP_CTX.Process(target=_noop, daemon=True)
-    p.start()
-    p.join()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging(job_manager.get_job_queue)
-    if sys.platform != "win32":
-        threading.Thread(target=_warmup_forkserver, daemon=True).start()
+    _worker_pool.warmup_in_background()
     yield
 
 
