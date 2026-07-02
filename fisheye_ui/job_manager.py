@@ -1,8 +1,7 @@
 import csv
+import ctypes
 import glob
-import multiprocessing
-import queue
-import sys
+import queue as _queue
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -15,17 +14,21 @@ from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
 
-if sys.platform != "win32":
-    multiprocessing.set_forkserver_preload(["fisheye", "torch", "ultralytics"])
-    _MP_CTX = multiprocessing.get_context("forkserver")
-else:
-    _MP_CTX = multiprocessing.get_context("spawn")
+logger = structlog.get_logger()
+
+
+def _raise_in_thread(tid: int, exc_type: type) -> None:
+    """Inject an exception into a running thread at its next Python bytecode."""
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+        ctypes.c_ulong(tid), ctypes.py_object(exc_type)
+    )
+    if res > 1:
+        # Rolled back if something went wrong
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), None)
 
 
 @dataclass
 class Job:
-    """Job class."""
-
     id: str
     status: JobStatus
     created_at: datetime
@@ -34,18 +37,15 @@ class Job:
     results: Optional[List] = None
     error: Optional[str] = None
     progress_queue: Optional[Any] = field(default=None, repr=False)
-    _process: Optional[multiprocessing.Process] = field(default=None, repr=False)
+    _thread_id: Optional[int] = field(default=None, repr=False)
 
 
 class JobManager:
-    """Job manager class."""
-
-    def __init__(self):
+    def __init__(self) -> None:
         self._jobs: Dict[str, Job] = {}
         self._lock = threading.Lock()
 
     def create_job(self, config: Union[Dict, DictConfig]) -> str:
-        """Create a new job."""
         if isinstance(config, DictConfig):
             config_dict = OmegaConf.to_container(config, resolve=True)
         else:
@@ -58,19 +58,17 @@ class JobManager:
             created_at=datetime.utcnow(),
             config=config_dict,
             output_dir=config_dict.get("output_dir"),
-            progress_queue=_MP_CTX.Queue(maxsize=100),
+            progress_queue=_queue.Queue(),
         )
-
         with self._lock:
             self._jobs[job_id] = job
 
-        thread = threading.Thread(target=self._run, args=(job,), daemon=True)
-        thread.start()
-
+        t = threading.Thread(target=self._run, args=(job,), daemon=True)
+        t.start()
+        job._thread_id = t.ident
         return job_id
 
     def get_job(self, job_id: str) -> Optional[Job]:
-        """Retrieve a job by its ID."""
         return self._jobs.get(job_id)
 
     def get_job_queue(self, job_id: str) -> Optional[Any]:
@@ -78,85 +76,53 @@ class JobManager:
         return job.progress_queue if job is not None else None
 
     def cancel_job(self, job_id: str) -> bool:
-        """Cancel a running job by terminating its subprocess."""
         job = self._jobs.get(job_id)
         if job is None or job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
             return False
         job.status = JobStatus.CANCELLED
-        if job._process and job._process.is_alive():
-            job._process.terminate()
-            job._process.join(timeout=5)
-            if job._process.is_alive():
-                job._process.kill()
+        if job._thread_id is not None:
+            _raise_in_thread(job._thread_id, SystemExit)
         return True
 
     def _run(self, job: Job) -> None:
-        """Monitor a job subprocess and update status when it finishes."""
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(job_id=job.id)
 
+        input_path = Path(job.config["input_path"])
+        # Mirror PipelineRunner._save_summary_csv's fallback: when input_path is
+        # itself a directory (batch mode), outputs land in that directory, not
+        # its parent
         output_dir = job.config.get("output_dir") or str(
-            Path(job.config["input_path"]).parent
+            input_path if input_path.is_dir() else input_path.parent
         )
         job.output_dir = output_dir
 
         if job.status == JobStatus.CANCELLED:
             return
 
-        result_queue = _MP_CTX.Queue()
-        process = _MP_CTX.Process(
-            target=_run_job_subprocess,
-            args=(job.config, job.id, result_queue, job.progress_queue),
-            daemon=True,
-        )
-        job._process = process
+        from fisheye.common.logging import progress_queue as pq_var
+        from fisheye.runner import run_job
 
         job.status = JobStatus.RUNNING
-        process.start()
-        process.join()
+        try:
+            pq_var.set(job.progress_queue)
+            run_job(job.config, job_id=job.id, configure_logging=True)
+        except (SystemExit, KeyboardInterrupt):
+            return  # cancelled via _raise_in_thread
+        except Exception as e:
+            job.error = str(e)
+            job.status = JobStatus.FAILED
+            return
 
         if job.status == JobStatus.CANCELLED:
             return
 
-        try:
-            success, error = result_queue.get_nowait()
-        except queue.Empty:
-            job.error = "Job process ended unexpectedly"
+        job.results = _read_summary_csv(output_dir, job.id)
+        if job.results is None:
+            job.error = "No files were processed. Output files may already exist in the output directory."
             job.status = JobStatus.FAILED
-            return
-
-        if success:
-            job.results = _read_summary_csv(output_dir, job.id)
-            if job.results is None:
-                job.error = "No files were processed. Output files may already exist in the output directory."
-                job.status = JobStatus.FAILED
-            else:
-                job.status = JobStatus.COMPLETED
         else:
-            job.error = error
-            job.status = JobStatus.FAILED
-
-
-def _noop() -> None:
-    pass
-
-
-def _run_job_subprocess(
-    config: dict,
-    job_id: str,
-    result_queue: multiprocessing.Queue,
-    progress_queue: multiprocessing.Queue,
-) -> None:
-    """Entry point for the job subprocess."""
-    try:
-        from fisheye.common.logging import progress_queue as pq_var
-        from fisheye.runner import run_job
-
-        pq_var.set(progress_queue)
-        run_job(config, job_id=job_id, configure_logging=True)
-        result_queue.put((True, None))
-    except Exception as e:
-        result_queue.put((False, str(e)))
+            job.status = JobStatus.COMPLETED
 
 
 def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:

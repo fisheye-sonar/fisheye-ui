@@ -1,1 +1,20 @@
 @import "tailwindcss";
+
+@keyframes swim {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  25%       { transform: translateY(-3px) rotate(-2deg); }
+  75%       { transform: translateY(3px) rotate(2deg); }
+}
+
+@keyframes swimIdle {
+  0%, 100% { transform: translateY(0px) scaleX(1); }
+  20%       { transform: translateY(-4px) scaleX(1); }
+  40%       { transform: translateY(0px) scaleX(1); }
+  60%       { transform: translateY(4px) scaleX(1); }
+  80%       { transform: translateY(0px) scaleX(1); }
+}
+
+@keyframes tailWag {
+  0%, 100% { d: path("M10 14 L0 5 L3 14 L0 23 Z"); }
+  50%       { d: path("M10 14 L2 4 L4 14 L2 24 Z"); }
+}

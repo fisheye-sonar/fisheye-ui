@@ -11,6 +11,7 @@ router = APIRouter(prefix="/files", tags=["files"])
 
 class PickedPath(BaseModel):
     """Model for the path that is chosen."""
+
     path: str
 
 
