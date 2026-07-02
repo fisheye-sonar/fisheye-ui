@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from fisheye_ui.job_manager import _worker_pool, job_manager
+from fisheye_ui.job_manager import job_manager
 from fisheye_ui.logging import configure_logging
 from fisheye_ui.routes.files import router as files_router
 from fisheye_ui.routes.jobs import router as jobs_router
@@ -16,10 +16,16 @@ from fisheye_ui.routes.jobs import router as jobs_router
 STATIC_DIR = Path(__file__).parent / "static"
 
 
+def _preimport() -> None:
+    """Pre-import fisheye/torch in a background thread so the first job starts fast."""
+    from fisheye.common.logging import progress_queue  # noqa
+    from fisheye.runner import run_job  # noqa
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging(job_manager.get_job_queue)
-    _worker_pool.warmup_in_background()
+    threading.Thread(target=_preimport, daemon=True).start()
     yield
 
 

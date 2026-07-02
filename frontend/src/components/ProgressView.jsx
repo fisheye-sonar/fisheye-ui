@@ -59,6 +59,10 @@ function formatLogEntry(data) {
       return 'Exported summary CSV'
     case 'exported_fc_txt':
       return 'Exported FC file'
+    case 'safe_execution_exception':
+      return `File failed · retrying (attempt ${data.attempt ?? '?'})`
+    case 'safe_execution_failed':
+      return `File failed after ${data.retries ?? 3} attempts · skipped`
     case 'job_finished':
       return data.duration_sec != null
         ? `Job complete · ${Math.round(data.duration_sec)}s`
@@ -73,9 +77,14 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
   const [detecting, setDetecting] = useState(false)
   const [detectPct, setDetectPct] = useState(0)
   const [filesComplete, setFilesComplete] = useState(0)
+  const [filesFailed, setFilesFailed] = useState(0)
+  const [filesTotal, setFilesTotal] = useState(0)
   const [logEntries, setLogEntries] = useState([])
+  const [showDetails, setShowDetails] = useState(false)
   const [error, setError] = useState(null)
   const [cancelled, setCancelled] = useState(false)
+  const [completed, setCompleted] = useState(false)
+  const [jobFinished, setJobFinished] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const logRef = useRef(null)
   const doneRef = useRef(false)
@@ -92,7 +101,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
         setDetecting(false)
         if (data.status === 'completed') {
           setStage('Complete')
-          onComplete(jobId, data.status)
+          setCompleted(true)
         } else if (data.status === 'cancelled') {
           setStage('Cancelled')
           setCancelled(true)
@@ -100,6 +109,11 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
           setStage('Failed')
           setError(data.error ?? 'Job failed')
         }
+        return
+      }
+
+      if (data.event === 'files_discovered') {
+        setFilesTotal(data.num_files ?? 0)
         return
       }
 
@@ -118,9 +132,24 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
         setDetectPct(0)
       }
 
+      // A file that exhausted its retries is done being attempted — count it
+      // separately rather than inferring failures from filesTotal - filesComplete.
+      if (data.event === 'safe_execution_failed' && data.function === '_run') {
+        setFilesFailed(prev => prev + 1)
+        setDetecting(false)
+        setDetectPct(0)
+      }
+
       if (data.event === 'initialized_dataloader') {
         setDetecting(false)
         setDetectPct(0)
+      }
+
+      // job_finished means the pipeline attempted every discovered file, even
+      // if the job is later marked failed for an unrelated reason (e.g. the
+      // summary CSV couldn't be found) — a reliable point to trust filesTotal.
+      if (data.event === 'job_finished') {
+        setJobFinished(true)
       }
 
       if (STAGE_LABELS[data.event]) {
@@ -159,7 +188,16 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
     }
   }
 
-  const isTerminal = cancelled || !!error
+  const isTerminal = cancelled || completed || !!error
+  // filesComplete undercounts successes: the pipeline's per-file stats logging
+  // is wrapped in a bare except-pass, so a file can succeed and export without
+  // ever emitting processed_file_stats/no_counts. filesFailed (from the retry
+  // decorator's terminal safe_execution_failed log) doesn't have that gap, and
+  // job_finished guarantees every discovered file was attempted (regardless of
+  // whether the job is later marked completed or failed) — so once we've seen
+  // it, derive successes from the total instead of counting them directly.
+  const filesAttempted = filesComplete + filesFailed
+  const filesSucceeded = jobFinished ? Math.max(filesTotal - filesFailed, 0) : filesComplete
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center py-12 px-4">
@@ -168,7 +206,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
             <p className="text-gray-500 mt-1">
-              {cancelled ? 'Job cancelled.' : error ? 'Job failed.' : 'Running inference…'}
+              {cancelled ? 'Job cancelled.' : error ? 'Job failed.' : completed ? 'Job complete.' : 'Running inference…'}
             </p>
           </div>
           <button
@@ -186,9 +224,14 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
           <div>
             <div className="flex justify-between items-baseline text-sm mb-2">
               <span className="font-medium text-gray-700">{stage}</span>
-              {detecting && (
-                <span className="text-gray-400 tabular-nums">{Math.round(detectPct)}%</span>
-              )}
+              <span className="flex items-center gap-2 text-gray-400 tabular-nums">
+                {filesTotal > 0 && (
+                  <span>
+                    {Math.min(filesAttempted + (isTerminal ? 0 : 1), filesTotal)}/{filesTotal} files
+                  </span>
+                )}
+                {detecting && <span>{Math.round(detectPct)}%</span>}
+              </span>
             </div>
 
             {/* Fish + bar container — pt-5 reserves space for the fish above the bar */}
@@ -197,8 +240,8 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
                 <div
                   className="absolute top-0 pointer-events-none"
                   style={{
-                    left: detecting ? `${detectPct}%` : '50%',
-                    transform: 'translateX(-50%)',
+                    left: detecting ? `${detectPct}%` : '0%',
+                    transform: detecting ? 'translateX(-50%)' : 'translateX(0)',
                     transition: 'left 0.4s ease-out',
                     animation: 'swim 0.9s ease-in-out infinite',
                   }}
@@ -221,7 +264,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
             </div>
           </div>
 
-          {filesComplete > 0 && (
+          {filesComplete > 0 && filesTotal === 0 && (
             <p className="text-sm text-gray-500">
               {filesComplete} {filesComplete === 1 ? 'file' : 'files'} processed
             </p>
@@ -237,20 +280,43 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
             </p>
           )}
 
+          {(completed || error) && filesTotal > 0 && (
+            <div className="flex gap-3">
+              <div className="flex-1 rounded-lg bg-green-50 px-3 py-2">
+                <div className="text-lg font-semibold text-green-700 tabular-nums">{filesSucceeded}</div>
+                <div className="text-xs text-green-700">successful</div>
+              </div>
+              <div className="flex-1 rounded-lg bg-gray-50 px-3 py-2">
+                <div className="text-lg font-semibold text-gray-500 tabular-nums">{filesFailed}</div>
+                <div className="text-xs text-gray-500">not successful</div>
+              </div>
+            </div>
+          )}
+
           {logEntries.length > 0 && (
-            <div ref={logRef} className="max-h-56 overflow-y-auto space-y-1.5 text-xs bg-gray-50 rounded-lg p-3">
-              {logEntries.map((entry, i) => (
-                <div
-                  key={i}
-                  className={
-                    entry.level === 'warning' ? 'text-amber-600' :
-                    entry.level === 'error' ? 'text-red-600' :
-                    'text-gray-500'
-                  }
-                >
-                  {formatLogEntry(entry)}
+            <div>
+              <button
+                onClick={() => setShowDetails(v => !v)}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showDetails ? 'Hide details' : 'Show details'}
+              </button>
+              {showDetails && (
+                <div ref={logRef} className="mt-2 max-h-56 overflow-y-auto space-y-1.5 text-xs bg-gray-50 rounded-lg p-3">
+                  {logEntries.map((entry, i) => (
+                    <div
+                      key={i}
+                      className={
+                        entry.level === 'warning' ? 'text-amber-600' :
+                        entry.level === 'error' ? 'text-red-600' :
+                        'text-gray-500'
+                      }
+                    >
+                      {formatLogEntry(entry)}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
 
@@ -267,13 +333,21 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
           )}
 
           {isTerminal && (
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-end gap-2 pt-1">
               <button
                 onClick={onBack}
-                className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
               >
                 Start new job
               </button>
+              {completed && (
+                <button
+                  onClick={() => onComplete(jobId, 'completed')}
+                  className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                >
+                  View results
+                </button>
+              )}
             </div>
           )}
         </div>
