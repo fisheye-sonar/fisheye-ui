@@ -40,6 +40,11 @@ async def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
+@app.get("/favicon.svg")
+async def favicon():
+    return FileResponse(STATIC_DIR / "favicon.svg")
+
+
 def main():
     host = "127.0.0.1"
     port = 8000

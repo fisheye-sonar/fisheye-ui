@@ -59,9 +59,14 @@ async def list_outputs(job_id: str):
     if not output_dir.is_dir():
         return OutputListResponse(files=[])
 
+    # Outputs are written next to each source file, which in batch mode can
+    # be nested under output_dir
     files = [
-        OutputFile(filename=f.name, size_bytes=f.stat().st_size)
-        for f in sorted(output_dir.iterdir())
+        OutputFile(
+            filename=f.relative_to(output_dir).as_posix(),
+            size_bytes=f.stat().st_size,
+        )
+        for f in sorted(output_dir.rglob("*"))
         if f.is_file()
     ]
     return OutputListResponse(files=files)
@@ -97,8 +102,8 @@ async def stream_job_progress(websocket: WebSocket, job_id: str):
         pass
 
 
-@router.get("/{job_id}/outputs/{filename}")
-async def download_output(job_id: str, filename: str):
+@router.get("/{job_id}/outputs/{file_path:path}")
+async def download_output(job_id: str, file_path: str):
     job = job_manager.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -106,12 +111,12 @@ async def download_output(job_id: str, filename: str):
         raise HTTPException(status_code=404, detail="No output directory for this job")
 
     output_dir = Path(job.output_dir).resolve()
-    file_path = (output_dir / filename).resolve()
+    resolved_path = (output_dir / file_path).resolve()
 
-    if not str(file_path).startswith(str(output_dir)):
+    if not resolved_path.is_relative_to(output_dir):
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    if not file_path.is_file():
+    if not resolved_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    return FileResponse(path=file_path, filename=filename)
+    return FileResponse(path=resolved_path, filename=resolved_path.name)
