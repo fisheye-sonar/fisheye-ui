@@ -342,7 +342,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
               </button>
               {completed && (
                 <button
-                  onClick={() => onComplete(jobId, 'completed')}
+                  onClick={() => onComplete(jobId, 'completed', { filesSucceeded, filesFailed, filesTotal })}
                   className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
                 >
                   View results
