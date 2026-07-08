@@ -21,6 +21,10 @@ fisheye-ui = "fisheye_ui.app:main"
 
 [tool.poetry.group.dev.dependencies]
 black = "^26.5.1"
+pytest = "^9.1.1"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]
