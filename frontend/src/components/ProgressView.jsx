@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import ResultsPanel from './ResultsPanel'
 
 function FishIcon({ className, style }) {
   return (
@@ -73,7 +74,7 @@ function formatLogEntry(data) {
   }
 }
 
-export default function ProgressView({ jobId, onComplete, onBack }) {
+export default function ProgressView({ jobId, onBack }) {
   const [stage, setStage] = useState('Connecting')
   const [detecting, setDetecting] = useState(false)
   const [detectPct, setDetectPct] = useState(0)
@@ -315,13 +316,15 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
             </div>
           )}
 
+          {completed && <ResultsPanel jobId={jobId} />}
+
           {logEntries.length > 0 && (
             <div>
               <button
                 onClick={() => setShowDetails(v => !v)}
                 className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
               >
-                {showDetails ? 'Hide details' : 'Show details'}
+                {showDetails ? 'Hide log' : 'Show log'}
               </button>
               {showDetails && (
                 <div ref={logRef} className="mt-2 max-h-56 overflow-y-auto space-y-1.5 text-xs bg-gray-50 rounded-lg p-3">
@@ -362,14 +365,6 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
               >
                 Start new job
               </button>
-              {completed && (
-                <button
-                  onClick={() => onComplete(jobId, 'completed', { filesSucceeded, filesFailed, filesTotal })}
-                  className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                >
-                  View results
-                </button>
-              )}
             </div>
           )}
         </div>
