@@ -222,7 +222,7 @@ export default function ProgressView({ jobId, onBack }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center py-12 px-4">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-4xl">
         <div className="mb-8 flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>

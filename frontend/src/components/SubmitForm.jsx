@@ -129,7 +129,7 @@ export default function SubmitForm({ onJobCreated }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center py-12 px-4">
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-4xl">
         <div className="mb-8">
           <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
           <p className="text-gray-500 mt-1">Predict salmon counts from ARIS and/or DIDSON sonar files.</p>

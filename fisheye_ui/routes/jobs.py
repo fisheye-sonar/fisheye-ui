@@ -1,10 +1,12 @@
 import asyncio
+import io
 import json
 import queue
+import zipfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.job_manager import job_manager
@@ -70,6 +72,38 @@ async def list_outputs(job_id: str):
         if f.is_file()
     ]
     return OutputListResponse(files=files)
+
+
+@router.get("/{job_id}/outputs/download-all")
+def download_all_outputs(job_id: str):
+    # Sync def, not async: zipping thousands of files is blocking CPU/IO work,
+    # and FastAPI runs sync handlers in a threadpool so it doesn't stall the
+    # event loop (and every other job's progress websocket) while it runs.
+    job = job_manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not job.output_dir:
+        raise HTTPException(status_code=404, detail="No output directory for this job")
+
+    output_dir = Path(job.output_dir)
+    if not output_dir.is_dir():
+        raise HTTPException(status_code=404, detail="No output directory for this job")
+
+    # Leave .arris/.ddf files out of the zip.
+    excluded_suffixes = {".aris", ".ddf"}
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(output_dir.rglob("*")):
+            if f.is_file() and f.suffix.lower() not in excluded_suffixes:
+                zf.write(f, arcname=f.relative_to(output_dir).as_posix())
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{job_id}-outputs.zip"'},
+    )
 
 
 @router.websocket("/{job_id}/stream")
