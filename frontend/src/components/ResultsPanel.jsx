@@ -156,6 +156,7 @@ export default function ResultsPanel({ jobId }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [expanded, setExpanded] = useState({})
+  const [openClips, setOpenClips] = useState(() => new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -172,6 +173,12 @@ export default function ResultsPanel({ jobId }) {
         if (!cancelled) {
           setJob(jobData)
           setOutputFiles(outputsData.files ?? [])
+          // Auto-expand when there's only one clip — collapsing it would just
+          // add a click to reach a download that's otherwise front and center.
+          const jobResults = jobData.results ?? []
+          if (jobResults.length === 1) {
+            setOpenClips(new Set([jobResults[0]['Source.Name']]))
+          }
         }
       } catch {
         if (!cancelled) setLoadError('Could not load results for this job.')
@@ -183,6 +190,15 @@ export default function ResultsPanel({ jobId }) {
     load()
     return () => { cancelled = true }
   }, [jobId])
+
+  function toggleClip(sourceName) {
+    setOpenClips(prev => {
+      const next = new Set(prev)
+      if (next.has(sourceName)) next.delete(sourceName)
+      else next.add(sourceName)
+      return next
+    })
+  }
 
   async function toggleView(filename) {
     if (expanded[filename]) {
@@ -290,7 +306,20 @@ export default function ResultsPanel({ jobId }) {
           </div>
 
           <div>
-            <h2 className="text-sm font-medium text-gray-700 mb-3">Downloads</h2>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-medium text-gray-700">Downloads</h2>
+              {outputFiles.length > 1 && (
+                <a
+                  href={`/jobs/${jobId}/outputs/download-all`}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+                >
+                  Download all
+                </a>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              These files are already saved to your output folder — download a copy here only if you need one elsewhere.
+            </p>
             <div className="space-y-3">
               {summaryFile && (
                 <div className="rounded-lg border border-gray-200 px-3 py-2">
@@ -303,25 +332,41 @@ export default function ResultsPanel({ jobId }) {
                 </div>
               )}
 
-              {clips.map(clip => (
-                <div key={clip.sourceName} className="rounded-lg border border-gray-200 px-3 py-2">
-                  <div className="text-sm font-medium text-gray-700 mb-2">{clip.sourceName}</div>
-                  <div className="space-y-3">
-                    {clip.files.map(f => (
-                      <OutputFileRow
-                        key={f.filename}
-                        jobId={jobId}
-                        file={f}
-                        expandedData={expanded[f.filename]}
-                        onToggleView={toggleView}
-                      />
-                    ))}
-                    {clip.files.length === 0 && (
-                      <p className="text-xs text-gray-400">No output files found for this clip.</p>
+              {clips.map(clip => {
+                const isOpen = openClips.has(clip.sourceName)
+                return (
+                  <div key={clip.sourceName} className="rounded-lg border border-gray-200 px-3 py-2">
+                    <button
+                      onClick={() => toggleClip(clip.sourceName)}
+                      className="w-full flex items-center justify-between text-sm font-medium text-gray-700"
+                    >
+                      {clip.sourceName}
+                      <svg
+                        className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isOpen && (
+                      <div className="space-y-3 mt-2">
+                        {clip.files.map(f => (
+                          <OutputFileRow
+                            key={f.filename}
+                            jobId={jobId}
+                            file={f}
+                            expandedData={expanded[f.filename]}
+                            onToggleView={toggleView}
+                          />
+                        ))}
+                        {clip.files.length === 0 && (
+                          <p className="text-xs text-gray-400">No output files found for this clip.</p>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </>
