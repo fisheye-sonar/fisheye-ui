@@ -12,6 +12,7 @@ from fisheye_ui.job_manager import job_manager
 from fisheye_ui.logging import configure_logging
 from fisheye_ui.routes.files import router as files_router
 from fisheye_ui.routes.jobs import router as jobs_router
+from fisheye_ui.routes.platform import router as platform_router
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FishEye UI", lifespan=lifespan)
 app.include_router(jobs_router)
 app.include_router(files_router)
+app.include_router(platform_router)
 app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
