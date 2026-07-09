@@ -21,8 +21,8 @@ const PLATFORM_PRESETS = {
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
   { value: 'detailed_csv', label: 'Detailed CSV' },
-  { value: 'fc', label: 'FC export' },
-  { value: 'mot', label: 'MOT export'}
+  { value: 'fc', label: 'FC' },
+  { value: 'mot', label: 'MOT'}
 ]
 
 // Weights are downloaded automatically from GitHub releases on first run

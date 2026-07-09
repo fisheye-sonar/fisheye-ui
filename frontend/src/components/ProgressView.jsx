@@ -40,13 +40,13 @@ function formatLogEntry(data) {
     case 'initialized_detector':
       return 'Detection model loaded'
     case 'initialized_dataloader':
-      return `Reading file · ${data.dataset_size?.toLocaleString() ?? '?'} frames`
+      return `Loading ${data.dataset_size?.toLocaleString() ?? '?'} frames`
     case 'initialized_tracker':
       return 'Tracker ready'
     case 'initialized_counter':
       return 'Counter ready'
     case 'processed_file_stats':
-      return `File complete · ${data.num_counts ?? 0} fish detected, ${data.num_tracks ?? 0} tracks`
+      return `File complete · Total final count ${data.num_counts ?? 0}`
     case 'no_counts':
       return `No fish detected · ${data.file_path ? data.file_path.split('/').pop() : 'file'}`
     case 'length_estimation_complete':
