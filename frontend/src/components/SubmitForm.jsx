@@ -376,15 +376,6 @@ export default function SubmitForm({ onJobCreated }) {
                   <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={platformConfig.use_blur}
-                      onChange={e => setPlatformField('use_blur', e.target.checked)}
-                      className="rounded border-gray-300 text-blue-600"
-                    />
-                    Apply blur preprocessing
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                    <input
-                      type="checkbox"
                       checked={platformConfig.use_multithreading}
                       onChange={e => setPlatformField('use_multithreading', e.target.checked)}
                       className="rounded border-gray-300 text-blue-600"
