@@ -150,7 +150,7 @@ function OutputFileRow({ jobId, file, expandedData, onToggleView }) {
   )
 }
 
-export default function ResultsView({ jobId, stats, onBack }) {
+export default function ResultsPanel({ jobId }) {
   const [job, setJob] = useState(null)
   const [outputFiles, setOutputFiles] = useState([])
   const [loading, setLoading] = useState(true)
@@ -242,123 +242,90 @@ export default function ResultsView({ jobId, stats, onBack }) {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-start justify-center py-12 px-4">
-      <div className="w-full max-w-2xl">
-        <div className="mb-8 flex items-start justify-between">
+    <div className="space-y-6">
+      {loading && <p className="text-sm text-gray-500">Loading results…</p>}
+
+      {loadError && (
+        <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{loadError}</p>
+      )}
+
+      {!loading && !loadError && (
+        <>
           <div>
-            <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
-            <p className="text-gray-500 mt-1">
-              {stats && stats.filesTotal > 0
-                ? `${stats.filesSucceeded} of ${stats.filesTotal} files processed successfully.`
-                : 'Job results.'}
-            </p>
-          </div>
-          <button
-            onClick={onBack}
-            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors mt-1"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            New job
-          </button>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-6">
-          {loading && <p className="text-sm text-gray-500">Loading results…</p>}
-
-          {loadError && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{loadError}</p>
-          )}
-
-          {!loading && !loadError && (
-            <>
-              <div>
-                <h2 className="text-sm font-medium text-gray-700 mb-3">Counts</h2>
-                {results.length > 0 ? (
-                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                    <table className="text-sm w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium text-gray-600">File</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Upstream</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Downstream</th>
-                          <th className="text-right px-3 py-2 font-medium text-gray-600">Net</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {clips.map(clip => (
-                          <tr key={clip.sourceName} className="border-t border-gray-100">
-                            <td className="px-3 py-2 text-gray-700">{clip.sourceName}</td>
-                            <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.upstream}</td>
-                            <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.downstream}</td>
-                            <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.net}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t border-gray-200 bg-gray-50 font-medium">
-                          <td className="px-3 py-2 text-gray-700">Total</td>
-                          <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.upstream}</td>
-                          <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.downstream}</td>
-                          <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.net}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">No count summary is available for this run.</p>
-                )}
+            <h2 className="text-sm font-medium text-gray-700 mb-3">Counts</h2>
+            {results.length > 0 ? (
+              <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="text-sm w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-gray-600">File</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Upstream</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Downstream</th>
+                      <th className="text-right px-3 py-2 font-medium text-gray-600">Net</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clips.map(clip => (
+                      <tr key={clip.sourceName} className="border-t border-gray-100">
+                        <td className="px-3 py-2 text-gray-700">{clip.sourceName}</td>
+                        <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.upstream}</td>
+                        <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.downstream}</td>
+                        <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{clip.net}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-gray-200 bg-gray-50 font-medium">
+                      <td className="px-3 py-2 text-gray-700">Total</td>
+                      <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.upstream}</td>
+                      <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.downstream}</td>
+                      <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{totals.net}</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
+            ) : (
+              <p className="text-sm text-gray-500">No count summary is available for this run.</p>
+            )}
+          </div>
 
-              <div>
-                <h2 className="text-sm font-medium text-gray-700 mb-3">Downloads</h2>
-                <div className="space-y-3">
-                  {summaryFile && (
-                    <div className="rounded-lg border border-gray-200 px-3 py-2">
+          <div>
+            <h2 className="text-sm font-medium text-gray-700 mb-3">Downloads</h2>
+            <div className="space-y-3">
+              {summaryFile && (
+                <div className="rounded-lg border border-gray-200 px-3 py-2">
+                  <OutputFileRow
+                    jobId={jobId}
+                    file={summaryFile}
+                    expandedData={expanded[summaryFile.filename]}
+                    onToggleView={toggleView}
+                  />
+                </div>
+              )}
+
+              {clips.map(clip => (
+                <div key={clip.sourceName} className="rounded-lg border border-gray-200 px-3 py-2">
+                  <div className="text-sm font-medium text-gray-700 mb-2">{clip.sourceName}</div>
+                  <div className="space-y-3">
+                    {clip.files.map(f => (
                       <OutputFileRow
+                        key={f.filename}
                         jobId={jobId}
-                        file={summaryFile}
-                        expandedData={expanded[summaryFile.filename]}
+                        file={f}
+                        expandedData={expanded[f.filename]}
                         onToggleView={toggleView}
                       />
-                    </div>
-                  )}
-
-                  {clips.map(clip => (
-                    <div key={clip.sourceName} className="rounded-lg border border-gray-200 px-3 py-2">
-                      <div className="text-sm font-medium text-gray-700 mb-2">{clip.sourceName}</div>
-                      <div className="space-y-3">
-                        {clip.files.map(f => (
-                          <OutputFileRow
-                            key={f.filename}
-                            jobId={jobId}
-                            file={f}
-                            expandedData={expanded[f.filename]}
-                            onToggleView={toggleView}
-                          />
-                        ))}
-                        {clip.files.length === 0 && (
-                          <p className="text-xs text-gray-400">No output files found for this clip.</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                    {clip.files.length === 0 && (
+                      <p className="text-xs text-gray-400">No output files found for this clip.</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
-
-          <div className="flex justify-end pt-1">
-            <button
-              onClick={onBack}
-              className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
-              Start new job
-            </button>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
