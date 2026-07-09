@@ -15,6 +15,7 @@ export default defineConfig({
         ws: true,
       },
       '/files': 'http://127.0.0.1:8000',
+      '/platform': 'http://127.0.0.1:8000',
     },
   },
 })

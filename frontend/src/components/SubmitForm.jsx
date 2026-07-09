@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const PLATFORM_PRESETS = {
   mps: {
@@ -25,10 +25,21 @@ const EXPORT_OPTIONS = [
   { value: 'mot', label: 'MOT export'}
 ]
 
+// Weights are downloaded automatically from GitHub releases on first run
+// (and cached locally after), keyed by filename — see fisheye's
+// common/weights.py. This is a static list for now rather instead of querying the
+// releases API live, so it stays in sync with this repo's supported models
+// only as far as we remember to update it
+const MODEL_CATALOG = [
+  { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s)' },
+    { value: 'cfc_detect_yolov5s_v0.pt', label: 'Detector v0 (YOLOv5s)' },
+]
+
 export default function SubmitForm({ onJobCreated }) {
   const [inputPath, setInputPath] = useState('')
   const [dragOver, setDragOver] = useState(false)
-  const [weightsPath, setWeightsPath] = useState('')
+  const [modelWeights, setModelWeights] = useState(MODEL_CATALOG[0].value)
+  const [customWeightsPath, setCustomWeightsPath] = useState('')
   const [device, setDevice] = useState('mps')
   const [platformConfig, setPlatformConfig] = useState(PLATFORM_PRESETS.mps.dataset)
 
@@ -40,6 +51,20 @@ export default function SubmitForm({ onJobCreated }) {
   function setPlatformField(field, value) {
     setPlatformConfig(prev => ({ ...prev, [field]: value }))
   }
+
+  // Pre-select the best available device for this machine; the dropdown
+  // stays editable in case the user wants to override it.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/platform')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && data?.device) handleDeviceChange(data.device)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   const [upstreamDirection, setUpstreamDirection] = useState('left')
   const [distanceOffset, setDistanceOffset] = useState(0)
   const [exportOptions, setExportOptions] = useState(['summary_csv', 'detailed_csv', 'fc'])
@@ -51,8 +76,8 @@ export default function SubmitForm({ onJobCreated }) {
   async function browsePath(type) {
     setPicking(type)
     try {
-      const endpoint = type === 'directory' ? '/files/pick-directory' : '/files/pick-file'
-      const res = await fetch(endpoint)
+      const endpoint = type === 'directory' ? '/files/directory-selection' : '/files/file-selection'
+      const res = await fetch(endpoint, { method: 'POST' })
       if (!res.ok) return
       const { path } = await res.json()
       if (path) setInputPath(path)
@@ -75,7 +100,7 @@ export default function SubmitForm({ onJobCreated }) {
     const platform = {
       ...PLATFORM_PRESETS[device],
       dataset: platformConfig,
-      model: { ...PLATFORM_PRESETS[device].model, weights: weightsPath },
+      model: { ...PLATFORM_PRESETS[device].model, weights: customWeightsPath.trim() || modelWeights },
     }
 
     const body = {
@@ -175,15 +200,38 @@ export default function SubmitForm({ onJobCreated }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Model weights path</label>
-            <input
-              type="text"
-              required
-              value={weightsPath}
-              onChange={e => setWeightsPath(e.target.value)}
-              placeholder="/path/to/cfc_detect_yolov5s_v1.pt"
+            <div className="flex items-center gap-1.5 mb-1">
+              <label className="block text-sm font-medium text-gray-700">Model</label>
+              <div className="relative group">
+                <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 space-y-1.5">
+                  <p>Pretrained weights are <strong>downloaded automatically on first run</strong> from GitHub releases. An internet connection is required the first time; subsequent runs use the cached file.</p>
+                  <p>
+                    See release assets for available models:{' '}
+                    <a
+                      href="https://github.com/fisheye-sonar/fisheye/releases"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-blue-300"
+                    >
+                      github.com/fisheye-sonar/fisheye/releases
+                    </a>
+                  </p>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                </div>
+              </div>
+            </div>
+            <select
+              value={modelWeights}
+              onChange={e => setModelWeights(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              {MODEL_CATALOG.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -285,6 +333,19 @@ export default function SubmitForm({ onJobCreated }) {
                   placeholder="Defaults to same folder as input file"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
+                <input
+                  type="text"
+                  value={customWeightsPath}
+                  onChange={e => setCustomWeightsPath(e.target.value)}
+                  placeholder="Overrides the selected model above"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Use this if you've placed a weights file manually, e.g. because automatic download failed.
+                </p>
               </div>
 
               <div className="border-t border-gray-100 pt-3">

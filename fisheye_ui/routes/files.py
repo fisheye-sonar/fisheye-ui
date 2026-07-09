@@ -54,8 +54,8 @@ def _pick_directory_linux() -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-@router.get("/pick-file", response_model=PickedPath)
-async def pick_file():
+@router.post("/file-selection", response_model=PickedPath)
+async def create_file_selection():
     """Wrapper around _pick_file_linux that returns a PickedPath."""
     path = None
     if sys.platform == "darwin":
@@ -76,8 +76,8 @@ async def pick_file():
     return PickedPath(path=path)
 
 
-@router.get("/pick-directory", response_model=PickedPath)
-async def pick_directory():
+@router.post("/directory-selection", response_model=PickedPath)
+async def create_directory_selection():
     """Wrapper around _pick_directory_linux that returns a PickedPath."""
     path = None
     if sys.platform == "darwin":
