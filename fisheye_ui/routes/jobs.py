@@ -75,7 +75,10 @@ async def list_outputs(job_id: str):
 
 
 @router.get("/{job_id}/outputs/download-all")
-async def download_all_outputs(job_id: str):
+def download_all_outputs(job_id: str):
+    # Sync def, not async: zipping thousands of files is blocking CPU/IO work,
+    # and FastAPI runs sync handlers in a threadpool so it doesn't stall the
+    # event loop (and every other job's progress websocket) while it runs.
     job = job_manager.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
