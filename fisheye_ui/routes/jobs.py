@@ -89,10 +89,13 @@ def download_all_outputs(job_id: str):
     if not output_dir.is_dir():
         raise HTTPException(status_code=404, detail="No output directory for this job")
 
+    # Leave .arris/.ddf files out of the zip.
+    excluded_suffixes = {".aris", ".ddf"}
+
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(output_dir.rglob("*")):
-            if f.is_file():
+            if f.is_file() and f.suffix.lower() not in excluded_suffixes:
                 zf.write(f, arcname=f.relative_to(output_dir).as_posix())
     buffer.seek(0)
 
