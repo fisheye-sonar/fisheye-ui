@@ -983,7 +983,7 @@ yolov5 = "^7.0.14"
 type = "git"
 url = "https://github.com/fisheye-sonar/fisheye.git"
 reference = "HEAD"
-resolved_reference = "f0a8bb8ed9542f047f5179f0553810d8a249f549"
+resolved_reference = "02b50a498af88fa77464754169a06346136d9606"
 
 [[package]]
 name = "fonttools"

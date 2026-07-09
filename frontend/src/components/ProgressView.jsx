@@ -27,8 +27,9 @@ const STAGE_LABELS = {
 }
 
 function parseDetectorProgress(event) {
-  const match = event?.match(/Progress:\s+([\d.]+)%/)
-  return match ? parseFloat(match[1]) : null
+  const match = event?.match(/Progress:\s+([\d.]+)%\s+\((\d+)\/(\d+)\)/)
+  if (!match) return null
+  return { pct: parseFloat(match[1]), current: parseInt(match[2], 10), total: parseInt(match[3], 10) }
 }
 
 function formatLogEntry(data) {
@@ -76,6 +77,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
   const [stage, setStage] = useState('Connecting')
   const [detecting, setDetecting] = useState(false)
   const [detectPct, setDetectPct] = useState(0)
+  const [detectFrames, setDetectFrames] = useState(null)
   const [filesComplete, setFilesComplete] = useState(0)
   const [filesFailed, setFilesFailed] = useState(0)
   const [filesTotal, setFilesTotal] = useState(0)
@@ -88,6 +90,8 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
   const [cancelling, setCancelling] = useState(false)
   const logRef = useRef(null)
   const doneRef = useRef(false)
+  const datasetSizeRef = useRef(null)
+  const batchSizeRef = useRef(null)
 
   useEffect(() => {
     const wsUrl = `ws://${window.location.host}/jobs/${jobId}/stream`
@@ -117,11 +121,22 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
         return
       }
 
-      // Detection progress — update bar only, don't log
-      const pct = parseDetectorProgress(data.event)
-      if (pct !== null) {
+      // Detection progress — update bar only, don't log.
+      // The (current/total) in the debug message counts batches, not frames,
+      // so convert to a frame count using the batch/dataset size from
+      // initialized_dataloader. Last batch may be a partial one, so clamp to
+      // the dataset size rather than overshooting.
+      const progress = parseDetectorProgress(data.event)
+      if (progress !== null) {
         setDetecting(true)
-        setDetectPct(pct)
+        setDetectPct(progress.pct)
+        const datasetSize = datasetSizeRef.current
+        const batchSize = batchSizeRef.current
+        setDetectFrames(
+          datasetSize && batchSize
+            ? { current: Math.min(progress.current * batchSize, datasetSize), total: datasetSize }
+            : null
+        )
         return
       }
 
@@ -130,6 +145,7 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
         setFilesComplete(prev => prev + 1)
         setDetecting(false)
         setDetectPct(0)
+        setDetectFrames(null)
       }
 
       // A file that exhausted its retries is done being attempted — count it
@@ -138,11 +154,15 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
         setFilesFailed(prev => prev + 1)
         setDetecting(false)
         setDetectPct(0)
+        setDetectFrames(null)
       }
 
       if (data.event === 'initialized_dataloader') {
         setDetecting(false)
         setDetectPct(0)
+        setDetectFrames(null)
+        datasetSizeRef.current = data.dataset_size ?? null
+        batchSizeRef.current = data.batch_size ?? null
       }
 
       // job_finished means the pipeline attempted every discovered file, even
@@ -225,12 +245,14 @@ export default function ProgressView({ jobId, onComplete, onBack }) {
             <div className="flex justify-between items-baseline text-sm mb-2">
               <span className="font-medium text-gray-700">{stage}</span>
               <span className="flex items-center gap-2 text-gray-400 tabular-nums">
-                {filesTotal > 0 && (
+                {filesTotal > 1 && (
                   <span>
                     {Math.min(filesAttempted + (isTerminal ? 0 : 1), filesTotal)}/{filesTotal} files
                   </span>
                 )}
-                {detecting && <span>{Math.round(detectPct)}%</span>}
+                {detecting && detectFrames && (
+                  <span>{detectFrames.current}/{detectFrames.total} frames</span>
+                )}
               </span>
             </div>
 
