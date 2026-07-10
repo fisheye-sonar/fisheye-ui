@@ -1,0 +1,44 @@
+{
+  "name": "fisheye-ui-electron",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "tree-kill": "^1.2.2"
+  },
+  "allowScripts": {
+    "electron@43.1.0": true,
+    "electron-winstaller@5.4.0": true
+  },
+  "build": {
+    "appId": "com.fisheyesonar.fisheye-ui",
+    "productName": "FishEye",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../packaging/pyinstaller/dist/fisheye-ui-backend",
+        "to": "backend"
+      }
+    ],
+    "mac": {
+      "icon": "build-resources/icon.icns",
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.utilities"
+    }
+  }
+}

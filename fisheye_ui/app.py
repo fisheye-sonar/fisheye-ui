@@ -1,3 +1,4 @@
+import os
 import threading
 import webbrowser
 from contextlib import asynccontextmanager
@@ -47,10 +48,18 @@ async def favicon():
     return FileResponse(STATIC_DIR / "favicon.svg")
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 def main():
     host = "127.0.0.1"
-    port = 8000
-    threading.Timer(1.0, lambda: webbrowser.open(f"http://{host}:{port}")).start()
+    port = int(os.environ.get("PORT", 8000))
+    # Set by the Electron shell, which opens its own window instead
+    # the system browser is only wanted for `poetry run fisheye-ui` dev use.
+    if not os.environ.get("FISHEYE_UI_NO_BROWSER"):
+        threading.Timer(1.0, lambda: webbrowser.open(f"http://{host}:{port}")).start()
     uvicorn.run(app, host=host, port=port)
 
 
