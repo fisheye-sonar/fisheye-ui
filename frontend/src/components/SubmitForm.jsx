@@ -150,7 +150,6 @@ export default function SubmitForm({ onJobCreated }) {
                 if (!window.fisheyeElectron) { console.warn('[fisheye] window.fisheyeElectron bridge is missing'); return }
                 try {
                   const path = window.fisheyeElectron.getPathForFile(file)
-                  console.log('[fisheye] resolved dropped path:', path)
                   if (path) setInputPath(path)
                 } catch (err) {
                   console.error('[fisheye] getPathForFile threw', err)
