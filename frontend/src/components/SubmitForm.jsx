@@ -142,7 +142,20 @@ export default function SubmitForm({ onJobCreated }) {
             <div
               onDragOver={e => { e.preventDefault(); setDragOver(true) }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={e => { e.preventDefault(); setDragOver(false) }}
+              onDrop={e => {
+                e.preventDefault()
+                setDragOver(false)
+                const file = e.dataTransfer.files?.[0]
+                if (!file) { console.warn('[fisheye] drop had no file in dataTransfer.files'); return }
+                if (!window.fisheyeElectron) { console.warn('[fisheye] window.fisheyeElectron bridge is missing'); return }
+                try {
+                  const path = window.fisheyeElectron.getPathForFile(file)
+                  console.log('[fisheye] resolved dropped path:', path)
+                  if (path) setInputPath(path)
+                } catch (err) {
+                  console.error('[fisheye] getPathForFile threw', err)
+                }
+              }}
               className={`border-2 border-dashed rounded-xl transition-colors ${
                 dragOver
                   ? 'border-blue-400 bg-blue-50'
