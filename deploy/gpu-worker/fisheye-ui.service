@@ -1,0 +1,20 @@
+[Unit]
+Description=FishEye UI (GPU worker)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+# Explicit working directory - fisheye's job runner creates a "logs"
+# directory relative to CWD, and systemd services default to CWD "/"
+# (read-only) if this isn't set. Same class of bug hit and fixed in the
+# Electron packaging, just at the systemd layer instead.
+WorkingDirectory=/opt/fisheye-ui
+Environment=FISHEYE_UI_NO_BROWSER=1
+Environment=PORT=8000
+ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
