@@ -46,6 +46,14 @@ cd "$APP_DIR"
 
 poetry install
 
+# fisheye_ui/static/ (what app.py serves at "/") is gitignored - it's the
+# frontend's build output, generated from frontend/ via `npm run build`.
+# git clone doesn't bring it over, so it has to be built here.
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+(cd frontend && npm install && npm run build)
+
 echo
 echo "Checking CUDA availability..."
 poetry run python -c "import torch; print('CUDA available:', torch.cuda.is_available())"
