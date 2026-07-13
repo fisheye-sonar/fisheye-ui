@@ -1,12 +1,17 @@
 import asyncio
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+import anyio
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/files", tags=["files"])
+
+UPLOAD_DIR = Path(tempfile.gettempdir()) / "fisheye-ui-uploads"
+ALLOWED_UPLOAD_SUFFIXES = {".aris", ".ddf"}
 
 
 class PickedPath(BaseModel):
@@ -96,3 +101,33 @@ async def create_directory_selection():
         raise HTTPException(status_code=204, detail="No folder selected")
 
     return PickedPath(path=path)
+
+
+@router.post("/upload", response_model=PickedPath, status_code=201)
+async def upload_file(request: Request, filename: str):
+    """Stream an uploaded ARIS/DDF file straight to disk and return its path.
+
+    Counterpart to the OS-native pickers above for deployments where the
+    server isn't running on the user's own machine (e.g. a remote GPU
+    worker), so there's no local filesystem to pick a path from.
+
+    Takes the raw request body so files (up to ~1.5GB) are written to their final path in a single pass -
+    multipart's `UploadFile` already buffers the whole upload to a spooled
+    temp file before the handler runs, so copying it again afterward would
+    write it to disk twice. Each chunk write is offloaded to a thread so
+    the event loop (and every other job's progress websocket) isn't
+    blocked while a large file is being written.
+    """
+    suffix = Path(filename).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
+        raise HTTPException(status_code=400, detail="File must be an ARIS or DDF file")
+
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    job_upload_dir = Path(tempfile.mkdtemp(dir=UPLOAD_DIR))
+    dest = job_upload_dir / Path(filename).name
+
+    with dest.open("wb") as out:
+        async for chunk in request.stream():
+            await anyio.to_thread.run_sync(out.write, chunk)
+
+    return PickedPath(path=str(dest))
