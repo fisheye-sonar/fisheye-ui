@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 const PLATFORM_PRESETS = {
   mps: {
@@ -37,11 +37,20 @@ const MODEL_CATALOG = [
 
 export default function SubmitForm({ onJobCreated }) {
   const [inputPath, setInputPath] = useState('')
+  // What's shown in the UI - the real path for native picks (useful to see),
+  // but just the original filename for uploads (the temp path it's saved
+  // under on disk is an implementation detail, not something to show the user).
+  const [inputLabel, setInputLabel] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [modelWeights, setModelWeights] = useState(MODEL_CATALOG[0].value)
   const [customWeightsPath, setCustomWeightsPath] = useState('')
   const [device, setDevice] = useState('mps')
   const [platformConfig, setPlatformConfig] = useState(PLATFORM_PRESETS.mps.dataset)
+  // Defaults to true so desktop's UI doesn't flash to the upload variant
+  // before this resolves; a remote worker flips it to false once /platform responds.
+  const [nativeFilePicker, setNativeFilePicker] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
 
   function handleDeviceChange(newDevice) {
     setDevice(newDevice)
@@ -59,7 +68,9 @@ export default function SubmitForm({ onJobCreated }) {
     fetch('/platform')
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
-        if (!cancelled && data?.device) handleDeviceChange(data.device)
+        if (cancelled || !data) return
+        if (data.device) handleDeviceChange(data.device)
+        if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -80,9 +91,40 @@ export default function SubmitForm({ onJobCreated }) {
       const res = await fetch(endpoint, { method: 'POST' })
       if (!res.ok) return
       const { path } = await res.json()
-      if (path) setInputPath(path)
+      if (path) {
+        setInputPath(path)
+        setInputLabel(path)
+      }
     } finally {
       setPicking(null)
+    }
+  }
+
+  // Counterpart to browsePath for deployments with no server-side file
+  // picker (e.g. a remote GPU worker) - uploads the file's bytes instead
+  // of asking the server to resolve a local path.
+  async function uploadFile(file) {
+    setUploading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/files/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        body: file,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.detail ?? 'Upload failed')
+        return
+      }
+      const { path } = await res.json()
+      if (path) {
+        setInputPath(path)
+        setInputLabel(file.name)
+      }
+    } catch {
+      setError('Upload failed')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -147,7 +189,13 @@ export default function SubmitForm({ onJobCreated }) {
                 setDragOver(false)
                 const file = e.dataTransfer.files?.[0]
                 if (!file) { console.warn('[fisheye] drop had no file in dataTransfer.files'); return }
-                if (!window.fisheyeElectron) { console.warn('[fisheye] window.fisheyeElectron bridge is missing'); return }
+                if (!window.fisheyeElectron) {
+                  // No Electron bridge to resolve a local path (remote deployment,
+                  // or the dev server opened in a plain browser) - upload the
+                  // dropped file's bytes instead.
+                  uploadFile(file)
+                  return
+                }
                 try {
                   const path = window.fisheyeElectron.getPathForFile(file)
                   if (path) setInputPath(path)
@@ -168,10 +216,10 @@ export default function SubmitForm({ onJobCreated }) {
                   <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
-                  <span className="flex-1 text-sm text-gray-800 font-mono truncate min-w-0">{inputPath}</span>
+                  <span className="flex-1 text-sm text-gray-800 font-mono truncate min-w-0">{inputLabel}</span>
                   <button
                     type="button"
-                    onClick={() => setInputPath('')}
+                    onClick={() => { setInputPath(''); setInputLabel('') }}
                     className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
                     aria-label="Clear selection"
                   >
@@ -185,25 +233,53 @@ export default function SubmitForm({ onJobCreated }) {
                   <svg className="mx-auto w-8 h-8 text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  <p className="text-sm text-gray-500">Drop a file or folder here</p>
-                  <p className="text-xs text-gray-400 mt-0.5 mb-4">ARIS or DDF files, or a folder containing them</p>
+                  <p className="text-sm text-gray-500">Drop a file{nativeFilePicker ? ' or folder' : ''} here</p>
+                  <p className="text-xs text-gray-400 mt-0.5 mb-4">
+                    {nativeFilePicker ? 'ARIS or DDF files, or a folder containing them' : 'ARIS or DDF files'}
+                  </p>
                   <div className="flex gap-2 justify-center">
-                    <button
-                      type="button"
-                      onClick={() => browsePath('file')}
-                      disabled={!!picking}
-                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
-                    >
-                      {picking === 'file' ? 'Opening…' : 'Select file'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => browsePath('directory')}
-                      disabled={!!picking}
-                      className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
-                    >
-                      {picking === 'directory' ? 'Opening…' : 'Select folder'}
-                    </button>
+                    {nativeFilePicker ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => browsePath('file')}
+                          disabled={!!picking}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
+                        >
+                          {picking === 'file' ? 'Opening…' : 'Select file'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => browsePath('directory')}
+                          disabled={!!picking}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
+                        >
+                          {picking === 'directory' ? 'Opening…' : 'Select folder'}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".aris,.ddf"
+                          className="sr-only"
+                          onChange={e => {
+                            const file = e.target.files?.[0]
+                            if (file) uploadFile(file)
+                            e.target.value = ''
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploading}
+                          className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
+                        >
+                          {uploading ? 'Uploading…' : 'Upload file'}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
