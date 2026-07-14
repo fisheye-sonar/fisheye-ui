@@ -8,7 +8,7 @@ const PLATFORM_PRESETS = {
   },
   cuda: {
     dataset: { batch_size: 32, workers: 10, use_multithreading: false, max_workers: 4, use_blur: true },
-    model: { type: 'yolov5', device: 'cuda' },
+    model: { type: 'yolov5', device: 'cuda:0' },
     inference: { use_multithreading: false, max_workers: 4, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
   },
   cpu: {
