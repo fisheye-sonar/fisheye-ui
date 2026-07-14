@@ -12,6 +12,10 @@ User=ubuntu
 WorkingDirectory=/opt/fisheye-ui
 Environment=FISHEYE_UI_NO_BROWSER=1
 Environment=PORT=8000
+# 0.0.0.0, not the default 127.0.0.1 - the gateway box reverse-proxies to
+# this worker over the private network, so it needs to be reachable on the
+# instance's actual network interface, not just loopback.
+Environment=HOST=0.0.0.0
 ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
 Restart=on-failure
 RestartSec=5
