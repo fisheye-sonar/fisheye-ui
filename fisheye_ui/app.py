@@ -54,7 +54,11 @@ async def health():
 
 
 def main():
-    host = "127.0.0.1"
+    # Defaults to loopback-only (desktop/Electron, and local `poetry run`
+    # dev use) - a remote deployment where another machine needs to reach
+    # this over the network (e.g. a gateway box reverse-proxying to it)
+    # sets HOST=0.0.0.0 to listen on all interfaces instead.
+    host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 8000))
     # Set by the Electron shell, which opens its own window instead
     # the system browser is only wanted for `poetry run fisheye-ui` dev use.
