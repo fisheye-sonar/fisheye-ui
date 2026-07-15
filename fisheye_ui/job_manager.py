@@ -36,6 +36,7 @@ class Job:
     output_dir: Optional[str] = None
     results: Optional[List] = None
     error: Optional[str] = None
+    finished_at: Optional[datetime] = None
     progress_queue: Optional[Any] = field(default=None, repr=False)
     _thread_id: Optional[int] = field(default=None, repr=False)
 
@@ -71,6 +72,28 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
+    def has_active_jobs(self) -> bool:
+        """Whether any job is currently pending or running - used by the
+        remote-deployment idle-watcher so it never stops the GPU worker
+        mid-job, regardless of how long it's been since the last request."""
+        return any(
+            job.status in (JobStatus.PENDING, JobStatus.RUNNING)
+            for job in self._jobs.values()
+        )
+
+    def idle_seconds(self) -> Optional[float]:
+        """Seconds since the most recent job finished (completed/failed/
+        cancelled). None if no job has ever finished on this worker - the
+        remote-deployment idle-watcher falls back to measuring from when
+        the worker woke up in that case. This (not raw HTTP traffic) is
+        the idle-watcher's activity signal: a user composing the form or
+        just reading a completed job's results isn't "activity" for
+        auto-sleep purposes, only job start/finish is."""
+        finished = [job.finished_at for job in self._jobs.values() if job.finished_at]
+        if not finished:
+            return None
+        return (datetime.utcnow() - max(finished)).total_seconds()
+
     def get_job_queue(self, job_id: str) -> Optional[Any]:
         job = self._jobs.get(job_id)
         return job.progress_queue if job is not None else None
@@ -80,6 +103,7 @@ class JobManager:
         if job is None or job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
             return False
         job.status = JobStatus.CANCELLED
+        job.finished_at = datetime.utcnow()
         if job._thread_id is not None:
             _raise_in_thread(job._thread_id, SystemExit)
         return True
@@ -112,6 +136,7 @@ class JobManager:
         except Exception as e:
             job.error = str(e)
             job.status = JobStatus.FAILED
+            job.finished_at = datetime.utcnow()
             return
 
         if job.status == JobStatus.CANCELLED:
@@ -123,6 +148,7 @@ class JobManager:
             job.status = JobStatus.FAILED
         else:
             job.status = JobStatus.COMPLETED
+        job.finished_at = datetime.utcnow()
 
 
 def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:

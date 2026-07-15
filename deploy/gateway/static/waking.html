@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FishEye</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f9fafb;
+        color: #374151;
+      }
+      .card {
+        max-width: 26rem;
+        width: 90%;
+        text-align: center;
+        padding: 2.5rem 2rem;
+      }
+      .fish {
+        font-size: 2.5rem;
+        display: inline-block;
+        animation: swim 2.2s ease-in-out infinite;
+      }
+      @keyframes swim {
+        0%,
+        100% {
+          transform: translateY(0px) rotate(0deg);
+        }
+        25% {
+          transform: translateY(-6px) rotate(-4deg);
+        }
+        75% {
+          transform: translateY(6px) rotate(4deg);
+        }
+      }
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #111827;
+        margin: 1rem 0 0.5rem;
+      }
+      p {
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: #6b7280;
+        margin: 0.25rem 0;
+      }
+      .bar-track {
+        margin-top: 1.5rem;
+        height: 0.375rem;
+        border-radius: 9999px;
+        background: #e5e7eb;
+        overflow: hidden;
+      }
+      .bar-fill {
+        height: 100%;
+        width: 40%;
+        border-radius: 9999px;
+        background: #2563eb;
+        animation: indeterminate 1.4s ease-in-out infinite;
+      }
+      @keyframes indeterminate {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(250%);
+        }
+      }
+      .error {
+        display: none;
+        margin-top: 1.5rem;
+      }
+      .error.visible {
+        display: block;
+      }
+      .error p {
+        color: #b91c1c;
+      }
+      button {
+        margin-top: 0.75rem;
+        padding: 0.5rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #fff;
+        background: #2563eb;
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #1d4ed8;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <span class="fish">🐟</span>
+      <h1 id="heading">Starting up FishEye</h1>
+      <p id="message">
+        The processing worker is waking up. This usually takes a minute or
+        two.
+      </p>
+      <div class="bar-track" id="progress">
+        <div class="bar-fill"></div>
+      </div>
+      <div class="error" id="error">
+        <p>The worker didn't wake up in time.</p>
+        <button id="retry">Try again</button>
+      </div>
+    </div>
+    <script>
+      const POLL_INTERVAL_MS = 3000;
+      const heading = document.getElementById("heading");
+      const message = document.getElementById("message");
+      const progress = document.getElementById("progress");
+      const errorBox = document.getElementById("error");
+      const retryButton = document.getElementById("retry");
+
+      let pollTimer = null;
+      let sawStarting = false;
+
+      function showError() {
+        clearTimeout(pollTimer);
+        heading.textContent = "Still asleep";
+        message.textContent = "";
+        progress.style.display = "none";
+        errorBox.classList.add("visible");
+      }
+
+      async function triggerWake() {
+        try {
+          await fetch("/gateway-wake", { method: "POST" });
+        } catch {
+          // The next status poll will retry.
+        }
+      }
+
+      async function poll() {
+        try {
+          const res = await fetch("/gateway-status", { cache: "no-store" });
+          const data = await res.json();
+
+          if (data.state === "ready") {
+            heading.textContent = "Ready!";
+            message.textContent = "Loading FishEye...";
+            window.location.reload();
+            return;
+          }
+
+          if (data.state === "starting") {
+            sawStarting = true;
+          } else if (data.state === "asleep") {
+            if (sawStarting) {
+              // Sidecar gave up waiting for the worker to come up.
+              showError();
+              return;
+            }
+            triggerWake();
+          }
+        } catch {
+          // Transient network hiccup - keep polling.
+        }
+        pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+      }
+
+      retryButton.addEventListener("click", () => {
+        errorBox.classList.remove("visible");
+        heading.textContent = "Starting up FishEye";
+        message.textContent =
+          "The processing worker is waking up. This usually takes a minute or two.";
+        progress.style.display = "";
+        sawStarting = false;
+        triggerWake();
+        poll();
+      });
+
+      poll();
+    </script>
+  </body>
+</html>

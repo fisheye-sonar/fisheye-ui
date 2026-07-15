@@ -1,0 +1,21 @@
+[Unit]
+Description=FishEye UI gateway sidecar (wake-trigger, status, idle-watcher)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/fisheye-gateway-sidecar
+Environment=GPU_WORKER_INSTANCE_ID=REPLACE_ME
+Environment=GPU_WORKER_PRIVATE_IP=REPLACE_ME
+Environment=GPU_WORKER_PORT=8000
+Environment=AWS_REGION=us-east-2
+Environment=IDLE_TIMEOUT_SECONDS=900
+# Bound to localhost only - not internet-facing, Caddy routes to it
+# internally for /gateway-status and /gateway-wake.
+ExecStart=/opt/fisheye-gateway-sidecar/venv/bin/uvicorn app:app --host 127.0.0.1 --port 9000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
