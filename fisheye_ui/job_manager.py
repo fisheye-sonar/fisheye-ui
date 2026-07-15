@@ -71,6 +71,15 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
+    def has_active_jobs(self) -> bool:
+        """Whether any job is currently pending or running - used by the
+        remote-deployment idle-watcher so it never stops the GPU worker
+        mid-job, regardless of how long it's been since the last request."""
+        return any(
+            job.status in (JobStatus.PENDING, JobStatus.RUNNING)
+            for job in self._jobs.values()
+        )
+
     def get_job_queue(self, job_id: str) -> Optional[Any]:
         job = self._jobs.get(job_id)
         return job.progress_queue if job is not None else None

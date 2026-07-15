@@ -27,6 +27,17 @@ async def create_job(request: JobCreateRequest):
     return JobCreatedResponse(id=job_id)
 
 
+@router.get("/active")
+async def get_active():
+    """Whether any job is currently pending or running.
+
+    Registered before /{job_id} so "active" isn't swallowed as a job_id.
+    Used by the remote-deployment idle-watcher to avoid stopping the GPU
+    worker mid-job.
+    """
+    return {"active": job_manager.has_active_jobs()}
+
+
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str):
     job = job_manager.get_job(job_id)
