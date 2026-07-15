@@ -95,7 +95,8 @@ export default function ProgressView({ jobId, onBack }) {
   const batchSizeRef = useRef(null)
 
   useEffect(() => {
-    const wsUrl = `ws://${window.location.host}/jobs/${jobId}/stream`
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${wsProtocol}//${window.location.host}/jobs/${jobId}/stream`
     const ws = new WebSocket(wsUrl)
 
     ws.onmessage = (e) => {

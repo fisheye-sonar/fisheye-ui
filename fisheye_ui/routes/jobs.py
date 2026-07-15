@@ -29,13 +29,20 @@ async def create_job(request: JobCreateRequest):
 
 @router.get("/active")
 async def get_active():
-    """Whether any job is currently pending or running.
+    """Whether any job is currently pending or running, and how long it's
+    been since the most recent job finished.
 
     Registered before /{job_id} so "active" isn't swallowed as a job_id.
-    Used by the remote-deployment idle-watcher to avoid stopping the GPU
-    worker mid-job.
+    This is the remote-deployment idle-watcher's activity signal: it never
+    stops the GPU worker while a job is active, and otherwise measures
+    idle time from job start/finish events rather than raw HTTP traffic
+    (browsing/composing the form isn't "activity" for auto-sleep purposes).
+    `idle_seconds` is null if no job has ever finished on this worker.
     """
-    return {"active": job_manager.has_active_jobs()}
+    return {
+        "active": job_manager.has_active_jobs(),
+        "idle_seconds": job_manager.idle_seconds(),
+    }
 
 
 @router.get("/{job_id}", response_model=JobResponse)
