@@ -1,6 +1,7 @@
 import csv
 import ctypes
 import glob
+import json
 import queue as _queue
 import threading
 from dataclasses import dataclass, field
@@ -128,6 +129,7 @@ class JobManager:
         from fisheye.runner import run_job
 
         job.status = JobStatus.RUNNING
+        _write_params_json(output_dir, job)
         try:
             pq_var.set(job.progress_queue)
             run_job(job.config, job_id=job.id, configure_logging=True)
@@ -149,6 +151,19 @@ class JobManager:
         else:
             job.status = JobStatus.COMPLETED
         job.finished_at = datetime.utcnow()
+
+
+def _write_params_json(output_dir: str, job: Job) -> None:
+    """Write the parameters used per job, so results stay traceable to the
+    settings that produced them without having to keep the UI open.
+    Written before run_job starts so it's there even if the job later fails."""
+    try:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        dest = Path(output_dir) / f"{job.id}_params.json"
+        with dest.open("w") as f:
+            json.dump(job.config, f, indent=2)
+    except OSError:
+        logger.warning("params_json_write_failed", output_dir=output_dir)
 
 
 def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:

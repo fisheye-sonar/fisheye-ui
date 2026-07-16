@@ -57,6 +57,7 @@ async def get_job(job_id: str):
         output_dir=job.output_dir,
         error=job.error,
         results=job.results,
+        config=job.config,
     )
 
 
