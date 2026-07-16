@@ -16,7 +16,7 @@ function FishIcon({ className, style }) {
 const STAGE_LABELS = {
   job_started: 'Starting',
   initialized_detector: 'Loading model',
-  initialized_dataloader: 'Loading file',
+  initialized_dataloader: 'Analyzing',
   initialized_tracker: 'Tracking',
   skip_length_estimation: 'Tracking',
   initialized_counter: 'Counting',
