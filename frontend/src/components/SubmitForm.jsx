@@ -331,7 +331,7 @@ export default function SubmitForm({ onJobCreated }) {
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
-                    <p>Choose the device to run inference on.</p>
+                    <p>The recommended device is selected automatically. Change it only if you want to use a different device.</p>
                     <p><strong>Apple Silicon (MPS):</strong> For newer Macs with M1, M2, M3, or M4 chips.</p>
                     <p><strong>NVIDIA GPU (CUDA):</strong> For Windows/Linux computers with an NVIDIA graphics card.</p>
                     <p><strong>CPU:</strong> Works on any computer. Choose this if you're unsure.</p>
@@ -392,8 +392,8 @@ export default function SubmitForm({ onJobCreated }) {
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
                   <p><strong>Summary CSV:</strong> Exports one CSV containing one row per ARIS/DIDSON file with upstream, downstream, and net counts.</p>
                   <p><strong>Detailed CSV (per file):</strong> Exports one CSV per ARIS/DIDSON file containing one row per detected fish with its distance, direction, and additional measurement data.</p>
-                  <p><strong>ARISFish Count File:</strong> Exports Sound Metric's ARISFish-compatible count files containing each detected fish's distance, direction, and additional measurement data. This is the only export format that can be opened in ARISFish to review and edit fish markers.</p>
-                  <p><strong>Multi-Object Tracking (MOT):</strong> Exports fish tracks in Multi-Object Tracking (MOT) format for use with computer vision research and evaluation tools.</p>
+                  <p><strong>ARISFish Count File:</strong> Exports Sound Metrics' ARISFish-compatible count files containing each detected fish's distance, direction, and additional measurement data. This is the only export format that can be opened in ARISFish to review and edit fish markers.</p>
+                  <p><strong>Multi-Object Tracking (MOT):</strong> Exports fish tracks in Multi-Object Tracking (MOT) format for computer vision research and evaluation tools.</p>
                   <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                 </div>
               </div>
@@ -424,7 +424,7 @@ export default function SubmitForm({ onJobCreated }) {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
-                      Shifts each fish's marker this many meters away from the sonar camera. Markers are placed directly on the fish by default, which can make them hard to see in Sound Metric's ARISFish Software. A small offset moves them clear of the fish for easier viewing. If used, recommend shifting by 1-2 meters.
+                      Shifts each fish's marker this many meters away from the sonar camera. Markers are placed directly on the fish by default, which can make them hard to see in Sound Metrics' ARISFish Software. A small offset moves them clear of the fish for easier viewing. If used, recommend shifting by 1-2 meters.
                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                     </div>
                   </div>
