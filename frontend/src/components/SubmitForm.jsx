@@ -20,9 +20,9 @@ const PLATFORM_PRESETS = {
 
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
-  { value: 'detailed_csv', label: 'Detailed CSV' },
-  { value: 'fc', label: 'FC' },
-  { value: 'mot', label: 'MOT'}
+  { value: 'detailed_csv', label: 'Detailed CSV (per file)' },
+  { value: 'fc', label: 'ARISFish Count File' },
+  { value: 'mot', label: 'Multi-Object Tracking (MOT)'}
 ]
 
 // Weights are downloaded automatically from GitHub releases on first run
@@ -235,7 +235,7 @@ export default function SubmitForm({ onJobCreated }) {
                   </svg>
                   <p className="text-sm text-gray-500">Drop a file{nativeFilePicker ? ' or folder' : ''} here</p>
                   <p className="text-xs text-gray-400 mt-0.5 mb-4">
-                    {nativeFilePicker ? 'ARIS or DDF files, or a folder containing them' : 'ARIS or DDF files'}
+                    {nativeFilePicker ? 'ARIS or DIDSON files, or a folder containing them' : 'ARIS or DIDSON files'}
                   </p>
                   <div className="flex gap-2 justify-center">
                     {nativeFilePicker ? (
@@ -331,7 +331,7 @@ export default function SubmitForm({ onJobCreated }) {
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
-                    <p>Choose the device to run inference on.</p>
+                    <p>The recommended device is selected automatically. Change it only if you want to use a different device.</p>
                     <p><strong>Apple Silicon (MPS):</strong> For newer Macs with M1, M2, M3, or M4 chips.</p>
                     <p><strong>NVIDIA GPU (CUDA):</strong> For Windows/Linux computers with an NVIDIA graphics card.</p>
                     <p><strong>CPU:</strong> Works on any computer. Choose this if you're unsure.</p>
@@ -383,7 +383,21 @@ export default function SubmitForm({ onJobCreated }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Export options</label>
+            <div className="flex items-center gap-1.5 mb-2">
+              <label className="block text-sm font-medium text-gray-700">Export options</label>
+              <div className="relative group">
+                <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
+                  <p><strong>Summary CSV:</strong> Exports one CSV containing one row per ARIS/DIDSON file with upstream, downstream, and net counts.</p>
+                  <p><strong>Detailed CSV (per file):</strong> Exports one CSV per ARIS/DIDSON file containing one row per detected fish with its distance, direction, and additional measurement data.</p>
+                  <p><strong>ARISFish Count File:</strong> Exports Sound Metrics' ARISFish-compatible count files containing each detected fish's distance, direction, and additional measurement data. This is the only export format that can be opened in ARISFish to review and edit fish markers.</p>
+                  <p><strong>Multi-Object Tracking (MOT):</strong> Exports fish tracks in Multi-Object Tracking (MOT) format for computer vision research and evaluation tools.</p>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                </div>
+              </div>
+            </div>
             <div className="flex gap-4">
               {EXPORT_OPTIONS.map(opt => (
                 <label key={opt.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -403,7 +417,18 @@ export default function SubmitForm({ onJobCreated }) {
             <summary className="cursor-pointer text-gray-500 hover:text-gray-700 select-none">Advanced options</summary>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Distance offset (m)</label>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Distance offset (m)</label>
+                  <div className="relative group">
+                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                      Shifts each fish's marker this many meters away from the sonar camera. Markers are placed directly on the fish by default, which can make them hard to see in Sound Metrics' ARISFish Software. A small offset moves them clear of the fish for easier viewing. If used, recommend shifting by 1-2 meters.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                </div>
                 <input
                   type="number"
                   step="0.1"
@@ -413,7 +438,7 @@ export default function SubmitForm({ onJobCreated }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Output directory (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Output folder (optional)</label>
                 <input
                   type="text"
                   value={outputDir}
@@ -437,7 +462,18 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
 
               <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Platform configuration</p>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Platform configuration</p>
+                  <div className="relative group">
+                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                      These settings are automatically configured to work well with the selected device. Most users won't need to change them, but advanced users can fine-tune them to trade off processing speed and performance for their specific hardware.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Frames per batch</label>
