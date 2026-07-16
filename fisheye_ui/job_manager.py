@@ -73,13 +73,17 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
-    def has_active_jobs(self) -> bool:
-        """Whether any job is currently pending or running - used by the
-        remote-deployment idle-watcher so it never stops the GPU worker
-        mid-job, regardless of how long it's been since the last request."""
+    def has_active_jobs(self, exclude_job_id: Optional[str] = None) -> bool:
+        """Whether any job (other than exclude_job_id) is currently pending
+        or running. Used by the remote-deployment idle-watcher, with no
+        exclusion, so it never stops the GPU worker mid-job regardless of
+        how long it's been since the last request. Also used by the frontend
+        (excluding the job it's currently viewing) to warn that the shared
+        GPU is busy with another job."""
         return any(
             job.status in (JobStatus.PENDING, JobStatus.RUNNING)
             for job in self._jobs.values()
+            if job.id != exclude_job_id
         )
 
     def idle_seconds(self) -> Optional[float]:
