@@ -18,6 +18,9 @@ const PLATFORM_PRESETS = {
   },
 }
 
+const BATCH_SIZE_OPTIONS = [1, 2, 4, 8, 16, 32, 64, 128]
+const MAX_WORKERS_OPTIONS = [1, 2, 4, 8, 16]
+
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
   { value: 'detailed_csv', label: 'Detailed CSV (per file)' },
@@ -161,6 +164,20 @@ export default function SubmitForm({ onJobCreated }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+
+    if (!inputPath) {
+      setError('Select an input file or folder before starting.')
+      return
+    }
+    if (exportOptions.length === 0) {
+      setError('Select at least one export option.')
+      return
+    }
+    if (!Number.isFinite(distanceOffset)) {
+      setError('Distance offset must be a number.')
+      return
+    }
+
     setSubmitting(true)
 
     const platform = {
@@ -509,23 +526,27 @@ export default function SubmitForm({ onJobCreated }) {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Frames per batch</label>
-                    <input
-                      type="number"
-                      min="1"
+                    <select
                       value={platformConfig.batch_size}
                       onChange={e => setPlatformField('batch_size', parseInt(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      {BATCH_SIZE_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Max parallel workers</label>
-                    <input
-                      type="number"
-                      min="1"
+                    <select
                       value={platformConfig.max_workers}
                       onChange={e => setPlatformField('max_workers', parseInt(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      {MAX_WORKERS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="flex gap-4 mt-3">
