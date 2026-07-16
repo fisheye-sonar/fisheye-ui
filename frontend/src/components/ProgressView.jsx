@@ -27,6 +27,33 @@ const STAGE_LABELS = {
   job_finished: 'Finishing',
 }
 
+const EXPORT_LABELS = {
+  summary_csv: 'Summary CSV',
+  detailed_csv: 'Detailed CSV',
+  fc: 'FC',
+  mot: 'MOT',
+}
+
+const DEVICE_LABELS = {
+  mps: 'Apple Silicon (MPS)',
+  'cuda:0': 'NVIDIA GPU (CUDA)',
+  cpu: 'CPU',
+}
+
+function formatConfigLines(config) {
+  if (!config) return []
+  const model = config.platform?.model ?? {}
+  return [
+    `Input file/folder: ${config.input_path?.replace(/\/+$/, '').split('/').pop() || '—'}`,
+    `Results folder: ${config.output_dir || 'same folder as input'}`,
+    `Model weights: ${model.weights ?? '—'}`,
+    `Device: ${DEVICE_LABELS[model.device] ?? model.device ?? '—'}`,
+    `Upstream direction: ${config.upstream_direction ?? '—'}`,
+    `Distance offset: ${config.distance_offset ?? 0} m`,
+    `Export options: ${(config.export_options ?? []).map(o => EXPORT_LABELS[o] ?? o).join(', ') || '—'}`,
+  ]
+}
+
 function parseDetectorProgress(event) {
   const match = event?.match(/Progress:\s+([\d.]+)%\s+\((\d+)\/(\d+)\)/)
   if (!match) return null
@@ -83,6 +110,7 @@ export default function ProgressView({ jobId, onBack }) {
   const [filesFailed, setFilesFailed] = useState(0)
   const [filesTotal, setFilesTotal] = useState(0)
   const [logEntries, setLogEntries] = useState([])
+  const [configLines, setConfigLines] = useState([])
   const [showDetails, setShowDetails] = useState(false)
   const [error, setError] = useState(null)
   const [cancelled, setCancelled] = useState(false)
@@ -193,6 +221,18 @@ export default function ProgressView({ jobId, onBack }) {
       cleaned = true
       ws.close()
     }
+  }, [jobId])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch(`/jobs/${jobId}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        setConfigLines(formatConfigLines(data.config))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
   }, [jobId])
 
   useEffect(() => {
@@ -319,7 +359,7 @@ export default function ProgressView({ jobId, onBack }) {
 
           {completed && <ResultsPanel jobId={jobId} />}
 
-          {logEntries.length > 0 && (
+          {(configLines.length > 0 || logEntries.length > 0) && (
             <div>
               <button
                 onClick={() => setShowDetails(v => !v)}
@@ -329,6 +369,13 @@ export default function ProgressView({ jobId, onBack }) {
               </button>
               {showDetails && (
                 <div ref={logRef} className="mt-2 max-h-56 overflow-y-auto space-y-1.5 text-xs bg-gray-50 rounded-lg p-3">
+                  {configLines.length > 0 && (
+                    <div className="pb-1.5 mb-1.5 border-b border-gray-200 space-y-1">
+                      {configLines.map((line, i) => (
+                        <div key={i} className="text-gray-600">{line}</div>
+                      ))}
+                    </div>
+                  )}
                   {logEntries.map((entry, i) => (
                     <div
                       key={i}

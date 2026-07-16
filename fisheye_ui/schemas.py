@@ -31,6 +31,7 @@ class JobResponse(BaseModel):
     output_dir: Optional[str] = None
     error: Optional[str] = None
     results: Optional[List] = None
+    config: Dict[str, Any]
 
 
 class JobCreatedResponse(BaseModel):
