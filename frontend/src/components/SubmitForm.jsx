@@ -456,16 +456,18 @@ export default function SubmitForm({ onJobCreated }) {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Output folder (optional)</label>
-                <input
-                  type="text"
-                  value={outputDir}
-                  onChange={e => setOutputDir(e.target.value)}
-                  placeholder="Defaults to same folder as input file"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              {nativeFilePicker && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Output folder (optional)</label>
+                  <input
+                    type="text"
+                    value={outputDir}
+                    onChange={e => setOutputDir(e.target.value)}
+                    placeholder="Defaults to same folder as input file"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
                 <input
