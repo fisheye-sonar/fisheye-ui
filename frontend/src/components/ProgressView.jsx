@@ -235,6 +235,26 @@ export default function ProgressView({ jobId, onBack }) {
     return () => { cancelled = true }
   }, [jobId])
 
+  const isTerminal = cancelled || completed || !!error
+  const [otherJobActive, setOtherJobActive] = useState(false)
+
+  // Same shared-GPU signal as the submit form, excluding this job itself so
+  // it only flags when a *different* job is also running - otherwise this
+  // job's own RUNNING status would always trip it.
+  useEffect(() => {
+    if (isTerminal) return
+    let cancelled = false
+    const checkActive = () => {
+      fetch(`/jobs/active?exclude_job_id=${encodeURIComponent(jobId)}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (!cancelled && data) setOtherJobActive(data.active) })
+        .catch(() => {})
+    }
+    checkActive()
+    const interval = setInterval(checkActive, 5000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [jobId, isTerminal])
+
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logEntries])
@@ -250,7 +270,6 @@ export default function ProgressView({ jobId, onBack }) {
     }
   }
 
-  const isTerminal = cancelled || completed || !!error
   // filesComplete undercounts successes: the pipeline's per-file stats logging
   // is wrapped in a bare except-pass, so a file can succeed and export without
   // ever emitting processed_file_stats/no_counts. filesFailed (from the retry
@@ -331,6 +350,12 @@ export default function ProgressView({ jobId, onBack }) {
           {filesComplete > 0 && filesTotal === 0 && (
             <p className="text-sm text-gray-500">
               {filesComplete} {filesComplete === 1 ? 'file' : 'files'} processed
+            </p>
+          )}
+
+          {otherJobActive && !isTerminal && (
+            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
             </p>
           )}
 
