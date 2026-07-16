@@ -1,17 +1,64 @@
 import asyncio
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 import anyio
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from fisheye_ui.job_manager import job_manager
+from fisheye_ui.paths import UPLOAD_DIR
+
+logger = structlog.get_logger()
+
 router = APIRouter(prefix="/files", tags=["files"])
 
-UPLOAD_DIR = Path(tempfile.gettempdir()) / "fisheye-ui-uploads"
 ALLOWED_UPLOAD_SUFFIXES = {".aris", ".ddf"}
+
+# Safety net behind the immediate per-job cleanup in job_manager.py: catches
+# uploads that never became a job (abandoned) and output dirs a job finished
+# writing to but that are still waiting on _cleanup_upload_input's rmdir
+# (i.e. output_dir wasn't overridden, so outputs landed here too) - this
+# gives users a day to download results before the directory is reclaimed.
+UPLOAD_MAX_AGE_SECONDS = 24 * 60 * 60
+UPLOAD_SWEEP_INTERVAL_SECONDS = 60 * 60
+
+
+def _sweep_stale_uploads() -> None:
+    if not UPLOAD_DIR.is_dir():
+        return
+    in_use = job_manager.active_upload_dirs()
+    now = time.time()
+    for entry in UPLOAD_DIR.iterdir():
+        if not entry.is_dir() or entry in in_use:
+            continue
+        try:
+            age = now - entry.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if age > UPLOAD_MAX_AGE_SECONDS:
+            shutil.rmtree(entry, ignore_errors=True)
+
+
+def _sweep_loop() -> None:
+    while True:
+        try:
+            _sweep_stale_uploads()
+        except Exception:
+            logger.exception("upload_sweep_failed")
+        time.sleep(UPLOAD_SWEEP_INTERVAL_SECONDS)
+
+
+def start_upload_sweeper() -> None:
+    """Start the background thread that periodically deletes stale upload
+    directories. Called once from app startup."""
+    threading.Thread(target=_sweep_loop, daemon=True).start()
 
 
 class PickedPath(BaseModel):

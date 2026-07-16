@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fisheye_ui.job_manager import job_manager
 from fisheye_ui.logging import configure_logging
 from fisheye_ui.routes.files import router as files_router
+from fisheye_ui.routes.files import start_upload_sweeper
 from fisheye_ui.routes.jobs import router as jobs_router
 from fisheye_ui.routes.platform import router as platform_router
 
@@ -28,6 +29,7 @@ def _preimport() -> None:
 async def lifespan(app: FastAPI):
     configure_logging(job_manager.get_job_queue)
     threading.Thread(target=_preimport, daemon=True).start()
+    start_upload_sweeper()
     yield
 
 
