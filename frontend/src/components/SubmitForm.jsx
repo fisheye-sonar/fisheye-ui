@@ -468,19 +468,21 @@ export default function SubmitForm({ onJobCreated }) {
                   />
                 </div>
               )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
-                <input
-                  type="text"
-                  value={customWeightsPath}
-                  onChange={e => setCustomWeightsPath(e.target.value)}
-                  placeholder="Overrides the selected model above"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Use this if you've placed a weights file manually, e.g. because automatic download failed.
-                </p>
-              </div>
+              {nativeFilePicker && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
+                  <input
+                    type="text"
+                    value={customWeightsPath}
+                    onChange={e => setCustomWeightsPath(e.target.value)}
+                    placeholder="Overrides the selected model above"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Use this if you've placed a weights file manually, e.g. because automatic download failed.
+                  </p>
+                </div>
+              )}
 
               <div className="border-t border-gray-100 pt-3">
                 <div className="flex items-center gap-1.5 mb-3">
