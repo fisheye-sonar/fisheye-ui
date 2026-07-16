@@ -49,6 +49,10 @@ export default function SubmitForm({ onJobCreated }) {
   // Defaults to true so desktop's UI doesn't flash to the upload variant
   // before this resolves; a remote worker flips it to false once /platform responds.
   const [nativeFilePicker, setNativeFilePicker] = useState(true)
+  // Defaults to all three so the dropdown doesn't flash disabled options
+  // before this resolves; narrowed once /platform reports what torch can
+  // actually see on this machine (e.g. no mps on a headless AWS GPU worker).
+  const [availableDevices, setAvailableDevices] = useState(['mps', 'cuda', 'cpu'])
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
 
@@ -71,6 +75,7 @@ export default function SubmitForm({ onJobCreated }) {
         if (cancelled || !data) return
         if (data.device) handleDeviceChange(data.device)
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
+        if (Array.isArray(data.available_devices)) setAvailableDevices(data.available_devices)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -363,9 +368,13 @@ export default function SubmitForm({ onJobCreated }) {
                 onChange={e => handleDeviceChange(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="mps">MPS (Apple Silicon)</option>
-                <option value="cuda">CUDA (NVIDIA GPU)</option>
-                <option value="cpu">CPU</option>
+                <option value="mps" disabled={!availableDevices.includes('mps')}>
+                  MPS (Apple Silicon){!availableDevices.includes('mps') && ' — unavailable on this machine'}
+                </option>
+                <option value="cuda" disabled={!availableDevices.includes('cuda')}>
+                  CUDA (NVIDIA GPU){!availableDevices.includes('cuda') && ' — unavailable on this machine'}
+                </option>
+                <option value="cpu" disabled={!availableDevices.includes('cpu')}>CPU</option>
               </select>
             </div>
 
