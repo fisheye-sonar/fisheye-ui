@@ -56,6 +56,7 @@ export default function SubmitForm({ onJobCreated }) {
   // before this resolves; narrowed once /platform reports what torch can
   // actually see on this machine (e.g. no mps on a headless AWS GPU worker).
   const [availableDevices, setAvailableDevices] = useState(['mps', 'cuda', 'cpu'])
+  const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
 
@@ -79,6 +80,7 @@ export default function SubmitForm({ onJobCreated }) {
         if (data.device) handleDeviceChange(data.device)
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
         if (Array.isArray(data.available_devices)) setAvailableDevices(data.available_devices)
+        if (typeof data.temporary_gpu_hosting === 'boolean') setTemporaryGpuHosting(data.temporary_gpu_hosting)
       })
       .catch(() => {})
     return () => { cancelled = true }
@@ -217,6 +219,14 @@ export default function SubmitForm({ onJobCreated }) {
           <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
           <p className="text-gray-500 mt-1">Predict salmon counts from ARIS and/or DIDSON sonar files.</p>
         </div>
+
+        {temporaryGpuHosting && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6">
+            This web version uses computing resources provided by our team so you can try FishEye without any setup.
+            In the full release, the web app will require you to use your own cloud provider account for processing.
+            The desktop app runs locally on your computer and does not require a cloud provider account.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
 

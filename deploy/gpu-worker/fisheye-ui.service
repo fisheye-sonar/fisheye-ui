@@ -12,6 +12,10 @@ User=ubuntu
 WorkingDirectory=/opt/fisheye-ui
 Environment=FISHEYE_UI_NO_BROWSER=1
 Environment=PORT=8000
+# This box is a temporary stand-in we're personally paying for to support
+# demos - the end goal is users running the GPU worker on their own cloud
+# account instead. Surfaces a notice in the UI; remove once BYO-cloud ships.
+Environment=FISHEYE_TEMPORARY_GPU_HOSTING=1
 # 0.0.0.0, not the default 127.0.0.1 - the gateway box reverse-proxies to
 # this worker over the private network, so it needs to be reachable on the
 # instance's actual network interface, not just loopback.
