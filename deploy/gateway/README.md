@@ -30,12 +30,13 @@ Verify it directly before wiring Caddy to it:
 curl http://127.0.0.1:9000/gateway-status
 ```
 
-Also copy the static wake page next to it - Caddy serves this directly off
-disk, not through the sidecar process, so it stays reachable even if the
-sidecar were ever down too:
+Also copy the static wake page (and its logo) next to it - Caddy serves these
+directly off disk, not through the sidecar process, so they stay reachable
+even if the sidecar were ever down too:
 ```bash
 sudo mkdir -p /opt/fisheye-gateway-sidecar/static
 sudo cp /path/to/repo/deploy/gateway/static/waking.html /opt/fisheye-gateway-sidecar/static/
+sudo cp /path/to/repo/deploy/gateway/static/fisheye_blue_combined.svg /opt/fisheye-gateway-sidecar/static/
 ```
 
 ## Caddyfile changes needed
