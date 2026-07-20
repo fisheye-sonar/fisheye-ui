@@ -15,6 +15,7 @@ class PlatformResponse(BaseModel):
     device: str
     native_file_picker: bool
     available_devices: List[str]
+    temporary_gpu_hosting: bool
 
 
 def _native_file_picker_available() -> bool:
@@ -69,4 +70,9 @@ async def get_platform():
         device=recommended,
         native_file_picker=_native_file_picker_available(),
         available_devices=available,
+        # Set on the one GPU box we currently pay for to run demos (see
+        # deploy/gpu-worker/fisheye-ui.service) - not implied by being a
+        # remote/headless worker in general, since a user's own BYO-cloud
+        # worker will be remote and headless too but shouldn't show this.
+        temporary_gpu_hosting=True,  # bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
     )
