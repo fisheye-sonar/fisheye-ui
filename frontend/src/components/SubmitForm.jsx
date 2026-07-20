@@ -18,11 +18,14 @@ const PLATFORM_PRESETS = {
   },
 }
 
+const BATCH_SIZE_OPTIONS = [1, 2, 4, 8, 16, 32, 64, 128]
+const MAX_WORKERS_OPTIONS = [1, 2, 4, 8, 16]
+
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
-  { value: 'detailed_csv', label: 'Detailed CSV' },
-  { value: 'fc', label: 'FC' },
-  { value: 'mot', label: 'MOT'}
+  { value: 'detailed_csv', label: 'Detailed CSV (per file)' },
+  { value: 'fc', label: 'ARISFish Count File' },
+  { value: 'mot', label: 'Multi-Object Tracking (MOT)'}
 ]
 
 // Weights are downloaded automatically from GitHub releases on first run
@@ -49,6 +52,11 @@ export default function SubmitForm({ onJobCreated }) {
   // Defaults to true so desktop's UI doesn't flash to the upload variant
   // before this resolves; a remote worker flips it to false once /platform responds.
   const [nativeFilePicker, setNativeFilePicker] = useState(true)
+  // Defaults to all three so the dropdown doesn't flash disabled options
+  // before this resolves; narrowed once /platform reports what torch can
+  // actually see on this machine (e.g. no mps on a headless AWS GPU worker).
+  const [availableDevices, setAvailableDevices] = useState(['mps', 'cuda', 'cpu'])
+  const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
 
@@ -71,9 +79,30 @@ export default function SubmitForm({ onJobCreated }) {
         if (cancelled || !data) return
         if (data.device) handleDeviceChange(data.device)
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
+        if (Array.isArray(data.available_devices)) setAvailableDevices(data.available_devices)
+        if (typeof data.temporary_gpu_hosting === 'boolean') setTemporaryGpuHosting(data.temporary_gpu_hosting)
       })
       .catch(() => {})
     return () => { cancelled = true }
+  }, [])
+
+  const [gpuBusy, setGpuBusy] = useState(false)
+
+  // Jobs share whatever GPU is on this machine - there's no queue, so a job
+  // submitted while another is running competes for the same device instead
+  // of waiting its turn. Poll while this form is up so the warning appears
+  // even if the other job started after the page loaded.
+  useEffect(() => {
+    let cancelled = false
+    const checkActive = () => {
+      fetch('/jobs/active')
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (!cancelled && data) setGpuBusy(data.active) })
+        .catch(() => {})
+    }
+    checkActive()
+    const interval = setInterval(checkActive, 5000)
+    return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
   const [upstreamDirection, setUpstreamDirection] = useState('left')
@@ -137,6 +166,20 @@ export default function SubmitForm({ onJobCreated }) {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
+
+    if (!inputPath) {
+      setError('Select an input file or folder before starting.')
+      return
+    }
+    if (exportOptions.length === 0) {
+      setError('Select at least one export option.')
+      return
+    }
+    if (!Number.isFinite(distanceOffset)) {
+      setError('Distance offset must be a number.')
+      return
+    }
+
     setSubmitting(true)
 
     const platform = {
@@ -176,6 +219,14 @@ export default function SubmitForm({ onJobCreated }) {
           <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
           <p className="text-gray-500 mt-1">Predict salmon counts from ARIS and/or DIDSON sonar files.</p>
         </div>
+
+        {temporaryGpuHosting && (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6">
+            This web version uses computing resources provided by our team so you can try FishEye without any setup.
+            In the full release, the web app will require you to use your own cloud provider account for processing.
+            The desktop app runs locally on your computer and does not require a cloud provider account.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
 
@@ -235,7 +286,7 @@ export default function SubmitForm({ onJobCreated }) {
                   </svg>
                   <p className="text-sm text-gray-500">Drop a file{nativeFilePicker ? ' or folder' : ''} here</p>
                   <p className="text-xs text-gray-400 mt-0.5 mb-4">
-                    {nativeFilePicker ? 'ARIS or DDF files, or a folder containing them' : 'ARIS or DDF files'}
+                    {nativeFilePicker ? 'ARIS or DIDSON files, or a folder containing them' : 'ARIS or DIDSON files'}
                   </p>
                   <div className="flex gap-2 justify-center">
                     {nativeFilePicker ? (
@@ -331,7 +382,7 @@ export default function SubmitForm({ onJobCreated }) {
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                   </svg>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
-                    <p>Choose the device to run inference on.</p>
+                    <p>The recommended device is selected automatically. Change it only if you want to use a different device.</p>
                     <p><strong>Apple Silicon (MPS):</strong> For newer Macs with M1, M2, M3, or M4 chips.</p>
                     <p><strong>NVIDIA GPU (CUDA):</strong> For Windows/Linux computers with an NVIDIA graphics card.</p>
                     <p><strong>CPU:</strong> Works on any computer. Choose this if you're unsure.</p>
@@ -344,9 +395,13 @@ export default function SubmitForm({ onJobCreated }) {
                 onChange={e => handleDeviceChange(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="mps">MPS (Apple Silicon)</option>
-                <option value="cuda">CUDA (NVIDIA GPU)</option>
-                <option value="cpu">CPU</option>
+                <option value="mps" disabled={!availableDevices.includes('mps')}>
+                  MPS (Apple Silicon){!availableDevices.includes('mps') && ' — unavailable on this machine'}
+                </option>
+                <option value="cuda" disabled={!availableDevices.includes('cuda')}>
+                  CUDA (NVIDIA GPU){!availableDevices.includes('cuda') && ' — unavailable on this machine'}
+                </option>
+                <option value="cpu" disabled={!availableDevices.includes('cpu')}>CPU</option>
               </select>
             </div>
 
@@ -383,7 +438,21 @@ export default function SubmitForm({ onJobCreated }) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Export options</label>
+            <div className="flex items-center gap-1.5 mb-2">
+              <label className="block text-sm font-medium text-gray-700">Export options</label>
+              <div className="relative group">
+                <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
+                  <p><strong>Summary CSV:</strong> Exports one CSV containing one row per ARIS/DIDSON file with upstream, downstream, and net counts.</p>
+                  <p><strong>Detailed CSV (per file):</strong> Exports one CSV per ARIS/DIDSON file containing one row per detected fish with its distance, direction, and additional measurement data.</p>
+                  <p><strong>ARISFish Count File:</strong> Exports Sound Metrics' ARISFish-compatible count files containing each detected fish's distance, direction, and additional measurement data. This is the only export format that can be opened in ARISFish to review and edit fish markers.</p>
+                  <p><strong>Multi-Object Tracking (MOT):</strong> Exports fish tracks in Multi-Object Tracking (MOT) format for computer vision research and evaluation tools.</p>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                </div>
+              </div>
+            </div>
             <div className="flex gap-4">
               {EXPORT_OPTIONS.map(opt => (
                 <label key={opt.value} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
@@ -403,7 +472,18 @@ export default function SubmitForm({ onJobCreated }) {
             <summary className="cursor-pointer text-gray-500 hover:text-gray-700 select-none">Advanced options</summary>
             <div className="mt-3 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Distance offset (m)</label>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <label className="block text-sm font-medium text-gray-700">Distance offset (m)</label>
+                  <div className="relative group">
+                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                      Shifts each fish's marker this many meters away from the sonar camera. Markers are placed directly on the fish by default, which can make them hard to see in Sound Metrics' ARISFish Software. A small offset moves them clear of the fish for easier viewing. If used, recommend shifting by 1-2 meters.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                </div>
                 <input
                   type="number"
                   step="0.1"
@@ -412,52 +492,71 @@ export default function SubmitForm({ onJobCreated }) {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Output directory (optional)</label>
-                <input
-                  type="text"
-                  value={outputDir}
-                  onChange={e => setOutputDir(e.target.value)}
-                  placeholder="Defaults to same folder as input file"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
-                <input
-                  type="text"
-                  value={customWeightsPath}
-                  onChange={e => setCustomWeightsPath(e.target.value)}
-                  placeholder="Overrides the selected model above"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Use this if you've placed a weights file manually, e.g. because automatic download failed.
-                </p>
-              </div>
+              {nativeFilePicker && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Output folder (optional)</label>
+                  <input
+                    type="text"
+                    value={outputDir}
+                    onChange={e => setOutputDir(e.target.value)}
+                    placeholder="Defaults to same folder as input file"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              {nativeFilePicker && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Custom model weights path (optional)</label>
+                  <input
+                    type="text"
+                    value={customWeightsPath}
+                    onChange={e => setCustomWeightsPath(e.target.value)}
+                    placeholder="Overrides the selected model above"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Use this if you've placed a weights file manually, e.g. because automatic download failed.
+                  </p>
+                </div>
+              )}
 
               <div className="border-t border-gray-100 pt-3">
-                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Platform configuration</p>
+                <div className="flex items-center gap-1.5 mb-3">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Platform configuration</p>
+                  <div className="relative group">
+                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                      These settings are automatically configured to work well with the selected device. Most users won't need to change them, but advanced users can fine-tune them to trade off processing speed and performance for their specific hardware.
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Frames per batch</label>
-                    <input
-                      type="number"
-                      min="1"
+                    <select
                       value={platformConfig.batch_size}
                       onChange={e => setPlatformField('batch_size', parseInt(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      {BATCH_SIZE_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Max parallel workers</label>
-                    <input
-                      type="number"
-                      min="1"
+                    <select
                       value={platformConfig.max_workers}
                       onChange={e => setPlatformField('max_workers', parseInt(e.target.value))}
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
+                    >
+                      {MAX_WORKERS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="flex gap-4 mt-3">
@@ -474,6 +573,12 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
             </div>
           </details>
+
+          {gpuBusy && (
+            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
+            </p>
+          )}
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>

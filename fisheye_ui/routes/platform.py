@@ -1,9 +1,9 @@
 import os
 import shutil
 import sys
+from typing import List, Tuple
 
 from fastapi import APIRouter
-from fisheye.common.system import detect_platform
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/platform", tags=["platform"])
@@ -14,6 +14,8 @@ class PlatformResponse(BaseModel):
 
     device: str
     native_file_picker: bool
+    available_devices: List[str]
+    temporary_gpu_hosting: bool
 
 
 def _native_file_picker_available() -> bool:
@@ -33,10 +35,44 @@ def _native_file_picker_available() -> bool:
     return False
 
 
+def _device_availability() -> Tuple[str, List[str]]:
+    """Which inference devices torch reports as usable on this machine, and
+    which of those to recommend.
+
+    CPU always works. CUDA/MPS are only included if their respective torch
+    backend is actually available (e.g. a headless AWS GPU worker has cuda
+    but not mps, and a Mac without an NVIDIA GPU has mps/cpu but not cuda.)
+    The full list lets the frontend disable options a job would otherwise
+    fail on partway through, instead of the user finding out only after
+    submitting; the recommendation prefers cuda, then mps, then cpu.
+    """
+    devices = ["cpu"]
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            devices.append("cuda")
+        if torch.backends.mps.is_available():
+            devices.append("mps")
+
+    except ImportError:
+        pass
+
+    recommended = "cuda" if "cuda" in devices else "mps" if "mps" in devices else "cpu"
+    return recommended, devices
+
+
 @router.get("", response_model=PlatformResponse)
 async def get_platform():
     """Recommend a device (cuda/mps/cpu) for the current machine."""
+    recommended, available = _device_availability()
     return PlatformResponse(
-        device=detect_platform(),
+        device=recommended,
         native_file_picker=_native_file_picker_available(),
+        available_devices=available,
+        # Set on the one GPU box we currently pay for to run demos (see
+        # deploy/gpu-worker/fisheye-ui.service) - not implied by being a
+        # remote/headless worker in general, since a user's own BYO-cloud
+        # worker will be remote and headless too but shouldn't show this.
+        temporary_gpu_hosting=True,  # bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
     )

@@ -1,6 +1,7 @@
 import csv
 import ctypes
 import glob
+import json
 import queue as _queue
 import threading
 from dataclasses import dataclass, field
@@ -13,7 +14,6 @@ from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
-from fisheye_ui.paths import UPLOAD_DIR
 
 logger = structlog.get_logger()
 
@@ -73,26 +73,18 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
-    def has_active_jobs(self) -> bool:
-        """Whether any job is currently pending or running - used by the
-        remote-deployment idle-watcher so it never stops the GPU worker
-        mid-job, regardless of how long it's been since the last request."""
+    def has_active_jobs(self, exclude_job_id: Optional[str] = None) -> bool:
+        """Whether any job (other than exclude_job_id) is currently pending
+        or running. Used by the remote-deployment idle-watcher, with no
+        exclusion, so it never stops the GPU worker mid-job regardless of
+        how long it's been since the last request. Also used by the frontend
+        (excluding the job it's currently viewing) to warn that the shared
+        GPU is busy with another job."""
         return any(
             job.status in (JobStatus.PENDING, JobStatus.RUNNING)
             for job in self._jobs.values()
+            if job.id != exclude_job_id
         )
-
-    def active_upload_dirs(self) -> set:
-        """Directories a pending/running job is reading its input from - since
-        a job's output_dir defaults to that same directory when none is given,
-        this is often where it's writing outputs to as well. The periodic
-        upload-cleanup sweep in routes/files.py must never delete these out
-        from under an in-progress job."""
-        return {
-            Path(job.config["input_path"]).parent
-            for job in self._jobs.values()
-            if job.status in (JobStatus.PENDING, JobStatus.RUNNING)
-        }
 
     def idle_seconds(self) -> Optional[float]:
         """Seconds since the most recent job finished (completed/failed/
@@ -134,56 +126,48 @@ class JobManager:
         )
         job.output_dir = output_dir
 
-        try:
-            if job.status == JobStatus.CANCELLED:
-                return
-
-            from fisheye.common.logging import progress_queue as pq_var
-            from fisheye.runner import run_job
-
-            job.status = JobStatus.RUNNING
-            try:
-                pq_var.set(job.progress_queue)
-                run_job(job.config, job_id=job.id, configure_logging=True)
-            except (SystemExit, KeyboardInterrupt):
-                return  # cancelled via _raise_in_thread
-            except Exception as e:
-                job.error = str(e)
-                job.status = JobStatus.FAILED
-                job.finished_at = datetime.utcnow()
-                return
-
-            if job.status == JobStatus.CANCELLED:
-                return
-
-            job.results = _read_summary_csv(output_dir, job.id)
-            if job.results is None:
-                job.error = "No files were processed. Output files may already exist in the output directory."
-                job.status = JobStatus.FAILED
-            else:
-                job.status = JobStatus.COMPLETED
-            job.finished_at = datetime.utcnow()
-        finally:
-            _cleanup_upload_input(input_path)
-
-
-def _cleanup_upload_input(input_path: Path) -> None:
-    """Delete an uploaded input file once its job is done with it, freeing the
-    large raw file's disk space right away rather than waiting on the
-    periodic sweep. Only touches files under UPLOAD_DIR - inputs picked via
-    the native OS file pickers live elsewhere on disk and must never be
-    deleted. Leaves outputs alone: when output_dir wasn't overridden it
-    defaults to this same directory, so the rmdir here only succeeds once
-    it's otherwise empty; if outputs are still in it, the periodic sweep in
-    routes/files.py reclaims the rest later, once its retention window
-    passes."""
-    try:
-        if UPLOAD_DIR not in input_path.parents:
+        if job.status == JobStatus.CANCELLED:
             return
-        input_path.unlink(missing_ok=True)
-        input_path.parent.rmdir()
+
+        from fisheye.common.logging import progress_queue as pq_var
+        from fisheye.runner import run_job
+
+        job.status = JobStatus.RUNNING
+        _write_params_json(output_dir, job)
+        try:
+            pq_var.set(job.progress_queue)
+            run_job(job.config, job_id=job.id, configure_logging=True)
+        except (SystemExit, KeyboardInterrupt):
+            return  # cancelled via _raise_in_thread
+        except Exception as e:
+            job.error = str(e)
+            job.status = JobStatus.FAILED
+            job.finished_at = datetime.utcnow()
+            return
+
+        if job.status == JobStatus.CANCELLED:
+            return
+
+        job.results = _read_summary_csv(output_dir, job.id)
+        if job.results is None:
+            job.error = "No files were processed. Output files may already exist in the output directory."
+            job.status = JobStatus.FAILED
+        else:
+            job.status = JobStatus.COMPLETED
+        job.finished_at = datetime.utcnow()
+
+
+def _write_params_json(output_dir: str, job: Job) -> None:
+    """Write the parameters used per job, so results stay traceable to the
+    settings that produced them without having to keep the UI open.
+    Written before run_job starts so it's there even if the job later fails."""
+    try:
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        dest = Path(output_dir) / f"{job.id}_params.json"
+        with dest.open("w") as f:
+            json.dump(job.config, f, indent=2)
     except OSError:
-        pass
+        logger.warning("params_json_write_failed", output_dir=output_dir)
 
 
 def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:

@@ -1,22 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import ResultsPanel from './ResultsPanel'
 
-function FishIcon({ className, style }) {
-  return (
-    <svg viewBox="0 0 40 24" fill="currentColor" className={className} style={style} xmlns="http://www.w3.org/2000/svg">
-      <path d="M10 12 L0 4 L3 12 L0 20 Z" />
-      <ellipse cx="24" cy="12" rx="16" ry="9" />
-      <circle cx="33" cy="9" r="2.5" fill="white" opacity="0.9" />
-      <circle cx="34" cy="9" r="1.2" />
-      <path d="M18 5 C22 1 28 1 30 5" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 const STAGE_LABELS = {
   job_started: 'Starting',
   initialized_detector: 'Loading model',
-  initialized_dataloader: 'Loading file',
+  initialized_dataloader: 'Analyzing',
   initialized_tracker: 'Tracking',
   skip_length_estimation: 'Tracking',
   initialized_counter: 'Counting',
@@ -25,6 +13,33 @@ const STAGE_LABELS = {
   exported_summary_csv: 'Exporting',
   exported_fc_txt: 'Exporting',
   job_finished: 'Finishing',
+}
+
+const EXPORT_LABELS = {
+  summary_csv: 'Summary CSV',
+  detailed_csv: 'Detailed CSV',
+  fc: 'FC',
+  mot: 'MOT',
+}
+
+const DEVICE_LABELS = {
+  mps: 'Apple Silicon (MPS)',
+  'cuda:0': 'NVIDIA GPU (CUDA)',
+  cpu: 'CPU',
+}
+
+function formatConfigLines(config) {
+  if (!config) return []
+  const model = config.platform?.model ?? {}
+  return [
+    `Input file/folder: ${config.input_path?.replace(/\/+$/, '').split('/').pop() || '—'}`,
+    `Results folder: ${config.output_dir || 'same folder as input'}`,
+    `Model weights: ${model.weights ?? '—'}`,
+    `Device: ${DEVICE_LABELS[model.device] ?? model.device ?? '—'}`,
+    `Upstream direction: ${config.upstream_direction ?? '—'}`,
+    `Distance offset: ${config.distance_offset ?? 0} m`,
+    `Export options: ${(config.export_options ?? []).map(o => EXPORT_LABELS[o] ?? o).join(', ') || '—'}`,
+  ]
 }
 
 function parseDetectorProgress(event) {
@@ -83,6 +98,7 @@ export default function ProgressView({ jobId, onBack }) {
   const [filesFailed, setFilesFailed] = useState(0)
   const [filesTotal, setFilesTotal] = useState(0)
   const [logEntries, setLogEntries] = useState([])
+  const [configLines, setConfigLines] = useState([])
   const [showDetails, setShowDetails] = useState(false)
   const [error, setError] = useState(null)
   const [cancelled, setCancelled] = useState(false)
@@ -196,6 +212,38 @@ export default function ProgressView({ jobId, onBack }) {
   }, [jobId])
 
   useEffect(() => {
+    let cancelled = false
+    fetch(`/jobs/${jobId}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (cancelled || !data) return
+        setConfigLines(formatConfigLines(data.config))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [jobId])
+
+  const isTerminal = cancelled || completed || !!error
+  const [otherJobActive, setOtherJobActive] = useState(false)
+
+  // Same shared-GPU signal as the submit form, excluding this job itself so
+  // it only flags when a *different* job is also running - otherwise this
+  // job's own RUNNING status would always trip it.
+  useEffect(() => {
+    if (isTerminal) return
+    let cancelled = false
+    const checkActive = () => {
+      fetch(`/jobs/active?exclude_job_id=${encodeURIComponent(jobId)}`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (!cancelled && data) setOtherJobActive(data.active) })
+        .catch(() => {})
+    }
+    checkActive()
+    const interval = setInterval(checkActive, 5000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [jobId, isTerminal])
+
+  useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight
   }, [logEntries])
 
@@ -210,7 +258,6 @@ export default function ProgressView({ jobId, onBack }) {
     }
   }
 
-  const isTerminal = cancelled || completed || !!error
   // filesComplete undercounts successes: the pipeline's per-file stats logging
   // is wrapped in a bare except-pass, so a file can succeed and export without
   // ever emitting processed_file_stats/no_counts. filesFailed (from the retry
@@ -270,7 +317,7 @@ export default function ProgressView({ jobId, onBack }) {
                     animation: 'swim 0.9s ease-in-out infinite',
                   }}
                 >
-                  <FishIcon className="w-8 h-auto text-blue-500" />
+                  <img src="/fisheye_blue_combined.svg" alt="" className="w-8 h-auto" />
                 </div>
               )}
               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
@@ -291,6 +338,12 @@ export default function ProgressView({ jobId, onBack }) {
           {filesComplete > 0 && filesTotal === 0 && (
             <p className="text-sm text-gray-500">
               {filesComplete} {filesComplete === 1 ? 'file' : 'files'} processed
+            </p>
+          )}
+
+          {otherJobActive && !isTerminal && (
+            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
             </p>
           )}
 
@@ -319,7 +372,7 @@ export default function ProgressView({ jobId, onBack }) {
 
           {completed && <ResultsPanel jobId={jobId} />}
 
-          {logEntries.length > 0 && (
+          {(configLines.length > 0 || logEntries.length > 0) && (
             <div>
               <button
                 onClick={() => setShowDetails(v => !v)}
@@ -329,6 +382,13 @@ export default function ProgressView({ jobId, onBack }) {
               </button>
               {showDetails && (
                 <div ref={logRef} className="mt-2 max-h-56 overflow-y-auto space-y-1.5 text-xs bg-gray-50 rounded-lg p-3">
+                  {configLines.length > 0 && (
+                    <div className="pb-1.5 mb-1.5 border-b border-gray-200 space-y-1">
+                      {configLines.map((line, i) => (
+                        <div key={i} className="text-gray-600">{line}</div>
+                      ))}
+                    </div>
+                  )}
                   {logEntries.map((entry, i) => (
                     <div
                       key={i}
