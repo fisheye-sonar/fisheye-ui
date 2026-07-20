@@ -1,18 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ResultsPanel from './ResultsPanel'
 
-function FishIcon({ className, style }) {
-  return (
-    <svg viewBox="0 0 40 24" fill="currentColor" className={className} style={style} xmlns="http://www.w3.org/2000/svg">
-      <path d="M10 12 L0 4 L3 12 L0 20 Z" />
-      <ellipse cx="24" cy="12" rx="16" ry="9" />
-      <circle cx="33" cy="9" r="2.5" fill="white" opacity="0.9" />
-      <circle cx="34" cy="9" r="1.2" />
-      <path d="M18 5 C22 1 28 1 30 5" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 const STAGE_LABELS = {
   job_started: 'Starting',
   initialized_detector: 'Loading model',
@@ -329,7 +317,7 @@ export default function ProgressView({ jobId, onBack }) {
                     animation: 'swim 0.9s ease-in-out infinite',
                   }}
                 >
-                  <FishIcon className="w-8 h-auto text-blue-500" />
+                  <img src="/fisheye_blue_combined.svg" alt="" className="w-8 h-auto" />
                 </div>
               )}
               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">

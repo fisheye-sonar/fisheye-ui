@@ -43,9 +43,9 @@ async def index():
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.get("/favicon.svg")
+@app.get("/fisheye_blue_combined.svg")
 async def favicon():
-    return FileResponse(STATIC_DIR / "favicon.svg")
+    return FileResponse(STATIC_DIR / "fisheye_blue_combined.svg")
 
 
 @app.get("/health")
