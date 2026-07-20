@@ -43,8 +43,7 @@ input instead of the native OS pickers. If it reads `true`, something about
 the headless assumption doesn't hold on this AMI and is worth a second look
 before moving on to the gateway.
 
-## TODOs
-
-Nothing cleans up `/tmp/fisheye-ui-uploads/` — uploaded files accumulate
-there indefinitely. Not a blocker for initial verification, but worth a
-follow-up before this runs unattended for a long stretch.
+`/tmp/fisheye-ui-uploads/` is self-cleaning: each upload's raw file is
+deleted as soon as its job finishes with it, and a background sweep clears
+out anything left over (abandoned uploads, output dirs still waiting on a
+download) after 24 hours.
