@@ -14,6 +14,7 @@ from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
+from fisheye_ui.paths import UPLOAD_DIR
 
 logger = structlog.get_logger()
 
@@ -113,6 +114,20 @@ class JobManager:
             _raise_in_thread(job._thread_id, SystemExit)
         return True
 
+    def active_upload_dirs(self) -> set:
+        """Per-job dirs under UPLOAD_DIR that a pending/running job's input
+        still lives in - routes/files.py's sweep must not reclaim these out
+        from under an in-progress job. Native file-picker inputs (outside
+        UPLOAD_DIR) aren't included since the sweep never touches them."""
+        dirs = set()
+        for job in self._jobs.values():
+            if job.status not in (JobStatus.PENDING, JobStatus.RUNNING):
+                continue
+            upload_dir = Path(job.config["input_path"]).parent
+            if upload_dir.parent == UPLOAD_DIR:
+                dirs.add(upload_dir)
+        return dirs
+
     def _run(self, job: Job) -> None:
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(job_id=job.id)
@@ -126,35 +141,38 @@ class JobManager:
         )
         job.output_dir = output_dir
 
-        if job.status == JobStatus.CANCELLED:
-            return
-
-        from fisheye.common.logging import progress_queue as pq_var
-        from fisheye.runner import run_job
-
-        job.status = JobStatus.RUNNING
-        _write_params_json(output_dir, job)
         try:
-            pq_var.set(job.progress_queue)
-            run_job(job.config, job_id=job.id, configure_logging=True)
-        except (SystemExit, KeyboardInterrupt):
-            return  # cancelled via _raise_in_thread
-        except Exception as e:
-            job.error = str(e)
-            job.status = JobStatus.FAILED
+            if job.status == JobStatus.CANCELLED:
+                return
+
+            from fisheye.common.logging import progress_queue as pq_var
+            from fisheye.runner import run_job
+
+            job.status = JobStatus.RUNNING
+            _write_params_json(output_dir, job)
+            try:
+                pq_var.set(job.progress_queue)
+                run_job(job.config, job_id=job.id, configure_logging=True)
+            except (SystemExit, KeyboardInterrupt):
+                return  # cancelled via _raise_in_thread
+            except Exception as e:
+                job.error = str(e)
+                job.status = JobStatus.FAILED
+                job.finished_at = datetime.utcnow()
+                return
+
+            if job.status == JobStatus.CANCELLED:
+                return
+
+            job.results = _read_summary_csv(output_dir, job.id)
+            if job.results is None:
+                job.error = "No files were processed. Output files may already exist in the output directory."
+                job.status = JobStatus.FAILED
+            else:
+                job.status = JobStatus.COMPLETED
             job.finished_at = datetime.utcnow()
-            return
-
-        if job.status == JobStatus.CANCELLED:
-            return
-
-        job.results = _read_summary_csv(output_dir, job.id)
-        if job.results is None:
-            job.error = "No files were processed. Output files may already exist in the output directory."
-            job.status = JobStatus.FAILED
-        else:
-            job.status = JobStatus.COMPLETED
-        job.finished_at = datetime.utcnow()
+        finally:
+            _cleanup_upload_input(job)
 
 
 def _write_params_json(output_dir: str, job: Job) -> None:
@@ -168,6 +186,25 @@ def _write_params_json(output_dir: str, job: Job) -> None:
             json.dump(job.config, f, indent=2)
     except OSError:
         logger.warning("params_json_write_failed", output_dir=output_dir)
+
+
+def _cleanup_upload_input(job: Job) -> None:
+    """Delete a job's raw input file once the job is done with it. Only
+    touches files under UPLOAD_DIR (i.e. uploaded via /files/upload) - a
+    native file-picker path on the user's own machine is left alone. Also
+    removes the per-job upload dir if that leaves it empty; if outputs
+    landed there too (output_dir wasn't overridden), the rmdir fails and
+    routes/files.py's sweep reclaims it later once results have been
+    downloaded."""
+    input_path = Path(job.config["input_path"])
+    upload_dir = input_path.parent
+    if upload_dir.parent != UPLOAD_DIR:
+        return
+    try:
+        input_path.unlink(missing_ok=True)
+        upload_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:
