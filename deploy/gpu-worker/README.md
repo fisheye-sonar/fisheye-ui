@@ -43,7 +43,9 @@ input instead of the native OS pickers. If it reads `true`, something about
 the headless assumption doesn't hold on this AMI and is worth a second look
 before moving on to the gateway.
 
-`/tmp/fisheye-ui-uploads/` is self-cleaning: each upload's raw file is
+`/opt/fisheye-ui/uploads/` (not `/tmp` - see `FISHEYE_UI_UPLOAD_DIR` in
+`fisheye-ui.service`; this AMI's `/tmp` is tmpfs, wiped whenever the
+idle-watcher stops the instance) is self-cleaning: each upload's raw file is
 deleted as soon as its job finishes with it, and a background sweep clears
 out anything left over (abandoned uploads, output dirs still waiting on a
 download) after 24 hours.

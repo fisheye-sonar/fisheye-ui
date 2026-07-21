@@ -20,6 +20,12 @@ Environment=FISHEYE_TEMPORARY_GPU_HOSTING=1
 # this worker over the private network, so it needs to be reachable on the
 # instance's actual network interface, not just loopback.
 Environment=HOST=0.0.0.0
+# /tmp on this AMI is tmpfs - wiped whenever the idle-watcher stops the
+# instance. Point uploads at the EBS-backed app dir instead so an input
+# file mid-upload, or a finished job's results the user hasn't downloaded
+# yet, survive a stop/start cycle. (Uploads still get cleaned up by the
+# same age-based sweep/per-job cleanup as before, just off durable disk.)
+Environment=FISHEYE_UI_UPLOAD_DIR=/opt/fisheye-ui/uploads
 ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
 Restart=on-failure
 RestartSec=5
