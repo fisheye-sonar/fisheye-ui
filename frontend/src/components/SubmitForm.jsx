@@ -479,7 +479,7 @@ export default function SubmitForm({ onJobCreated }) {
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
-                      Shifts each fish's marker this many meters away from the sonar camera. Markers are placed directly on the fish by default, which can make them hard to see in Sound Metrics' ARISFish Software. A small offset moves them clear of the fish for easier viewing. If used, recommend shifting by 1-2 meters.
+                      Controls how far marks are placed from each detected fish in Sound Metrics' ARISFish software. Markers placed directly on the fish can make it difficult to review or measure the fish's length. A value of 0 places markers directly on the fish. If you use this setting, we recommend 1–2 meters.
                       <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
                     </div>
                   </div>
