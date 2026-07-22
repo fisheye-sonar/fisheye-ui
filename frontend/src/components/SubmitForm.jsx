@@ -34,7 +34,7 @@ const EXPORT_OPTIONS = [
 // releases API live, so it stays in sync with this repo's supported models
 // only as far as we remember to update it
 const MODEL_CATALOG = [
-    { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s) - Recommended' },
+    { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s) — Recommended' },
     { value: 'cfc_detect_yolov5s_v0.pt', label: 'Detector v0 (YOLOv5s)' },
 ]
 
