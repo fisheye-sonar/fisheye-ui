@@ -47,7 +47,12 @@ class Job:
 class JobManager:
     def __init__(self) -> None:
         self._jobs: Dict[str, Job] = {}
+        # Guards self._jobs
         self._lock = threading.Lock()
+        # Guards writes to persisted job state. Concurrent persists (e.g. job
+        # completion and cancellation) can race because they share the same
+        # temporary file, causing one write to overwrite the other.
+        self._persist_lock = threading.Lock()
         self._reload_from_disk()
 
     def create_job(self, config: Union[Dict, DictConfig]) -> str:
@@ -104,9 +109,10 @@ class JobManager:
                 "finished_at": job.finished_at.isoformat() if job.finished_at else None,
             }
             tmp_path = self._record_path(job.id).with_suffix(".json.tmp")
-            with tmp_path.open("w") as f:
-                json.dump(record, f)
-            os.replace(tmp_path, self._record_path(job.id))
+            with self._persist_lock:
+                with tmp_path.open("w") as f:
+                    json.dump(record, f)
+                os.replace(tmp_path, self._record_path(job.id))
         except OSError:
             logger.warning("job_persist_failed", job_id=job.id)
 

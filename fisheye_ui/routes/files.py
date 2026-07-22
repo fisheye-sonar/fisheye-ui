@@ -68,6 +68,17 @@ def _sweep_stale_job_records() -> None:
             entry.unlink(missing_ok=True)
             job_manager.drop_job(job_id)
 
+    # Orphaned by a crash landing between _persist's write and its rename
+    # It never becomes a real record, so it's never caught
+    # by the *.json pass above
+    for entry in JOBS_DIR.glob("*.json.tmp"):
+        try:
+            age = now - entry.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if age > UPLOAD_MAX_AGE_SECONDS:
+            entry.unlink(missing_ok=True)
+
 
 def _sweep_loop() -> None:
     while True:
