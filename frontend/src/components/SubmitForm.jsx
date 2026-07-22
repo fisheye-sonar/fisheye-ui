@@ -34,7 +34,7 @@ const EXPORT_OPTIONS = [
 // releases API live, so it stays in sync with this repo's supported models
 // only as far as we remember to update it
 const MODEL_CATALOG = [
-  { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s)' },
+    { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s) — Recommended' },
     { value: 'cfc_detect_yolov5s_v0.pt', label: 'Detector v0 (YOLOv5s)' },
 ]
 
@@ -56,6 +56,10 @@ export default function SubmitForm({ onJobCreated }) {
   // before this resolves; narrowed once /platform reports what torch can
   // actually see on this machine (e.g. no mps on a headless AWS GPU worker).
   const [availableDevices, setAvailableDevices] = useState(['mps', 'cuda', 'cpu'])
+  // The device /platform recommended for this machine. Kept separate from
+  // `device` so the "Recommended" tag stays on the right option even if the
+  // user picks something else.
+  const [recommendedDevice, setRecommendedDevice] = useState(null)
   const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
@@ -77,7 +81,10 @@ export default function SubmitForm({ onJobCreated }) {
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (cancelled || !data) return
-        if (data.device) handleDeviceChange(data.device)
+        if (data.device) {
+          handleDeviceChange(data.device)
+          setRecommendedDevice(data.device)
+        }
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
         if (Array.isArray(data.available_devices)) setAvailableDevices(data.available_devices)
         if (typeof data.temporary_gpu_hosting === 'boolean') setTemporaryGpuHosting(data.temporary_gpu_hosting)
@@ -342,8 +349,10 @@ export default function SubmitForm({ onJobCreated }) {
             <div className="flex items-center gap-1.5 mb-1">
               <label className="block text-sm font-medium text-gray-700">Model</label>
               <div className="relative group">
-                <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" fill="currentColor" />
+                  <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                  <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                 </svg>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 space-y-1.5">
                   <p>Pretrained weights are <strong>downloaded automatically on first run</strong> from GitHub releases. An internet connection is required the first time; subsequent runs use the cached file.</p>
@@ -378,8 +387,10 @@ export default function SubmitForm({ onJobCreated }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <label className="block text-sm font-medium text-gray-700">Device</label>
                 <div className="relative group">
-                  <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="currentColor" />
+                    <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                    <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                   </svg>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
                     <p>The recommended device is selected automatically. Change it only if you want to use a different device.</p>
@@ -396,12 +407,14 @@ export default function SubmitForm({ onJobCreated }) {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="mps" disabled={!availableDevices.includes('mps')}>
-                  MPS (Apple Silicon){!availableDevices.includes('mps') && ' — unavailable on this machine'}
+                  MPS (Apple Silicon){recommendedDevice === 'mps' && ' — Recommended'}{!availableDevices.includes('mps') && ' — unavailable on this machine'}
                 </option>
                 <option value="cuda" disabled={!availableDevices.includes('cuda')}>
-                  CUDA (NVIDIA GPU){!availableDevices.includes('cuda') && ' — unavailable on this machine'}
+                  CUDA (NVIDIA GPU){recommendedDevice === 'cuda' && ' — Recommended'}{!availableDevices.includes('cuda') && ' — unavailable on this machine'}
                 </option>
-                <option value="cpu" disabled={!availableDevices.includes('cpu')}>CPU</option>
+                <option value="cpu" disabled={!availableDevices.includes('cpu')}>
+                  CPU{recommendedDevice === 'cpu' && ' — Recommended'}
+                </option>
               </select>
             </div>
 
@@ -409,8 +422,10 @@ export default function SubmitForm({ onJobCreated }) {
               <div className="flex items-center gap-1.5 mb-1">
                 <label className="block text-sm font-medium text-gray-700">Upstream direction</label>
                 <div className="relative group">
-                  <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" fill="currentColor" />
+                    <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                    <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                   </svg>
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
                     The direction fish travel when moving upstream. If upstream is <strong>Left</strong>, fish cross right→left. If upstream is <strong>Right</strong>, fish cross left→right.
@@ -441,8 +456,10 @@ export default function SubmitForm({ onJobCreated }) {
             <div className="flex items-center gap-1.5 mb-2">
               <label className="block text-sm font-medium text-gray-700">Export options</label>
               <div className="relative group">
-                <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" fill="currentColor" />
+                  <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                  <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                 </svg>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 bg-gray-900 text-white text-xs rounded-lg px-3 py-2.5 hidden group-hover:block z-10 pointer-events-none space-y-1.5">
                   <p><strong>Summary CSV:</strong> Exports one CSV containing one row per ARIS/DIDSON file with upstream, downstream, and net counts.</p>
@@ -475,8 +492,10 @@ export default function SubmitForm({ onJobCreated }) {
                 <div className="flex items-center gap-1.5 mb-1">
                   <label className="block text-sm font-medium text-gray-700">Mark offset (m)</label>
                   <div className="relative group">
-                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" fill="currentColor" />
+                      <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                      <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                     </svg>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
                       Controls how far marks are placed from each detected fish in Sound Metrics' ARISFish software. Markers placed directly on the fish can make it difficult to review or measure the fish's length. A value of 0 places markers directly on the fish. If you use this setting, we recommend 1–2 meters.
@@ -524,8 +543,10 @@ export default function SubmitForm({ onJobCreated }) {
                 <div className="flex items-center gap-1.5 mb-3">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Platform configuration</p>
                   <div className="relative group">
-                    <svg className="w-3.5 h-3.5 text-gray-400 cursor-help" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    <svg className="w-5 h-5 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" fill="currentColor" />
+                      <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                      <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
                     </svg>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
                       These settings are automatically configured to work well with the selected device. Most users won't need to change them, but advanced users can fine-tune them to trade off processing speed and performance for their specific hardware.
