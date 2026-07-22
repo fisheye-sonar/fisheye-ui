@@ -52,7 +52,7 @@ function formatLogEntry(data) {
   switch (data.event) {
     case 'job_started':
       return data.detector_version
-        ? `Job started · detector v${data.detector_version}`
+        ? `Job started · detector ${data.detector_version}`
         : 'Job started'
     case 'initialized_detector':
       return 'Detection model loaded'
