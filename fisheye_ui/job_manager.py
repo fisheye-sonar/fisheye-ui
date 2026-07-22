@@ -77,7 +77,7 @@ class JobManager:
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
 
-    def forget(self, job_id: str) -> None:
+    def drop_job(self, job_id: str) -> None:
         """Drop a job from the in-memory registry. Called by routes/files.py's
         sweep once its on-disk record has expired, so a long-running process
         doesn't keep accumulating finished jobs in memory forever."""

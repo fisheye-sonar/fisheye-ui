@@ -66,7 +66,7 @@ def _sweep_stale_job_records() -> None:
             continue
         if age > UPLOAD_MAX_AGE_SECONDS:
             entry.unlink(missing_ok=True)
-            job_manager.forget(job_id)
+            job_manager.drop_job(job_id)
 
 
 def _sweep_loop() -> None:
