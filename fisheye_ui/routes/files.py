@@ -75,13 +75,13 @@ def _sweep_loop() -> None:
             _sweep_stale_uploads()
             _sweep_stale_job_records()
         except Exception:
-            logger.exception("upload_sweep_failed")
+            logger.exception("sweep_failed")
         time.sleep(UPLOAD_SWEEP_INTERVAL_SECONDS)
 
 
-def start_upload_sweeper() -> None:
+def start_sweeper() -> None:
     """Start the background thread that periodically deletes stale upload
-    directories. Called once from app startup."""
+    directories and expired job records. Called once from app startup."""
     threading.Thread(target=_sweep_loop, daemon=True).start()
 
 
