@@ -56,6 +56,8 @@ logs
 # Uploaded input/output data (GPU worker, when FISHEYE_UI_UPLOAD_DIR points
 # inside the app checkout instead of the system temp dir)
 /uploads/
+/fisheye-ui-uploads
+/fisheye-ui-jobs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

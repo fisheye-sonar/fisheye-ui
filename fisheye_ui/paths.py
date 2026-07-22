@@ -15,3 +15,9 @@ UPLOAD_DIR = Path(
     os.environ.get("FISHEYE_UI_UPLOAD_DIR")
     or Path(tempfile.gettempdir()) / "fisheye-ui-uploads"
 )
+
+# Persisted job records - it still rides along with the same FISHEYE_UI_UPLOAD_DIR
+# persistent-disk override, and gets swept on the same 24h schedule as stale
+# uploads (routes/files.py), but keeping it out of UPLOAD_DIR itself means
+# _sweep_stale_uploads' directory walk can never step on it.
+JOBS_DIR = UPLOAD_DIR.parent / "fisheye-ui-jobs"
