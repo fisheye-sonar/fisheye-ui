@@ -2,6 +2,7 @@ import csv
 import ctypes
 import glob
 import json
+import os
 import queue as _queue
 import threading
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
 from fisheye_ui.enums import JobStatus
-from fisheye_ui.paths import UPLOAD_DIR
+from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
 
 logger = structlog.get_logger()
 
@@ -47,6 +48,7 @@ class JobManager:
     def __init__(self) -> None:
         self._jobs: Dict[str, Job] = {}
         self._lock = threading.Lock()
+        self._reload_from_disk()
 
     def create_job(self, config: Union[Dict, DictConfig]) -> str:
         if isinstance(config, DictConfig):
@@ -65,6 +67,7 @@ class JobManager:
         )
         with self._lock:
             self._jobs[job_id] = job
+        self._persist(job)
 
         t = threading.Thread(target=self._run, args=(job,), daemon=True)
         t.start()
@@ -73,6 +76,78 @@ class JobManager:
 
     def get_job(self, job_id: str) -> Optional[Job]:
         return self._jobs.get(job_id)
+
+    def forget(self, job_id: str) -> None:
+        """Drop a job from the in-memory registry. Called by routes/files.py's
+        sweep once its on-disk record has expired, so a long-running process
+        doesn't keep accumulating finished jobs in memory forever."""
+        with self._lock:
+            self._jobs.pop(job_id, None)
+
+    def _record_path(self, job_id: str) -> Path:
+        return JOBS_DIR / f"{job_id}.json"
+
+    def _persist(self, job: Job) -> None:
+        """Write job to disk so it survives a process restart. Written
+        temp-then-rename so a crash mid-write can never leave a corrupt
+        record behind for _reload_from_disk to trip over."""
+        try:
+            JOBS_DIR.mkdir(parents=True, exist_ok=True)
+            record = {
+                "id": job.id,
+                "status": job.status.value,
+                "created_at": job.created_at.isoformat(),
+                "config": job.config,
+                "output_dir": job.output_dir,
+                "results": job.results,
+                "error": job.error,
+                "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+            }
+            tmp_path = self._record_path(job.id).with_suffix(".json.tmp")
+            with tmp_path.open("w") as f:
+                json.dump(record, f)
+            os.replace(tmp_path, self._record_path(job.id))
+        except OSError:
+            logger.warning("job_persist_failed", job_id=job.id)
+
+    def _reload_from_disk(self) -> None:
+        """Restore job records left by a previous process (e.g. before a
+        restart), so results stay reachable by job ID without the UI having
+        stayed open. A job still PENDING/RUNNING when the process went down
+        can't be resumed - its thread is gone - so it's surfaced as failed
+        instead of left spinning forever."""
+        if not JOBS_DIR.is_dir():
+            return
+        for path in JOBS_DIR.glob("*.json"):
+            try:
+                with path.open() as f:
+                    record = json.load(f)
+                job = Job(
+                    id=record["id"],
+                    status=JobStatus(record["status"]),
+                    created_at=datetime.fromisoformat(record["created_at"]),
+                    config=record["config"],
+                    output_dir=record.get("output_dir"),
+                    results=record.get("results"),
+                    error=record.get("error"),
+                    finished_at=(
+                        datetime.fromisoformat(record["finished_at"])
+                        if record.get("finished_at")
+                        else None
+                    ),
+                    progress_queue=_queue.Queue(),
+                )
+            except (OSError, json.JSONDecodeError, KeyError, ValueError):
+                logger.warning("job_record_reload_failed", path=str(path))
+                continue
+
+            if job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+                job.status = JobStatus.FAILED
+                job.error = "Interrupted by a server restart"
+                job.finished_at = datetime.utcnow()
+                self._persist(job)
+
+            self._jobs[job.id] = job
 
     def has_active_jobs(self, exclude_job_id: Optional[str] = None) -> bool:
         """Whether any job (other than exclude_job_id) is currently pending
@@ -110,6 +185,7 @@ class JobManager:
             return False
         job.status = JobStatus.CANCELLED
         job.finished_at = datetime.utcnow()
+        self._persist(job)
         if job._thread_id is not None:
             _raise_in_thread(job._thread_id, SystemExit)
         return True
@@ -149,6 +225,7 @@ class JobManager:
             from fisheye.runner import run_job
 
             job.status = JobStatus.RUNNING
+            self._persist(job)
             _write_params_json(output_dir, job)
             try:
                 pq_var.set(job.progress_queue)
@@ -159,6 +236,7 @@ class JobManager:
                 job.error = str(e)
                 job.status = JobStatus.FAILED
                 job.finished_at = datetime.utcnow()
+                self._persist(job)
                 return
 
             if job.status == JobStatus.CANCELLED:
@@ -171,6 +249,7 @@ class JobManager:
             else:
                 job.status = JobStatus.COMPLETED
             job.finished_at = datetime.utcnow()
+            self._persist(job)
         finally:
             _cleanup_upload_input(job)
 

@@ -12,8 +12,9 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from fisheye_ui.enums import JobStatus
 from fisheye_ui.job_manager import job_manager
-from fisheye_ui.paths import UPLOAD_DIR
+from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
 
 logger = structlog.get_logger()
 
@@ -46,10 +47,33 @@ def _sweep_stale_uploads() -> None:
             shutil.rmtree(entry, ignore_errors=True)
 
 
+def _sweep_stale_job_records() -> None:
+    """Counterpart to _sweep_stale_uploads for persisted job records
+    (job_manager.py) - same 24h window, same schedule, so there's one
+    retention policy rather than two. Skips a record still PENDING/RUNNING
+    even if its file is somehow old, mirroring active_upload_dirs' guard."""
+    if not JOBS_DIR.is_dir():
+        return
+    now = time.time()
+    for entry in JOBS_DIR.glob("*.json"):
+        job_id = entry.stem
+        job = job_manager.get_job(job_id)
+        if job is not None and job.status in (JobStatus.PENDING, JobStatus.RUNNING):
+            continue
+        try:
+            age = now - entry.stat().st_mtime
+        except FileNotFoundError:
+            continue
+        if age > UPLOAD_MAX_AGE_SECONDS:
+            entry.unlink(missing_ok=True)
+            job_manager.forget(job_id)
+
+
 def _sweep_loop() -> None:
     while True:
         try:
             _sweep_stale_uploads()
+            _sweep_stale_job_records()
         except Exception:
             logger.exception("upload_sweep_failed")
         time.sleep(UPLOAD_SWEEP_INTERVAL_SECONDS)
