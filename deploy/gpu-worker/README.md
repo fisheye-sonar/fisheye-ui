@@ -49,3 +49,28 @@ idle-watcher stops the instance) is self-cleaning: each upload's raw file is
 deleted as soon as its job finishes with it, and a background sweep clears
 out anything left over (abandoned uploads, output dirs still waiting on a
 download) after 24 hours.
+
+## Updating / redeploying
+
+`setup.sh` is one-time provisioning - there's no auto-deploy pipeline, so
+picking up new commits on an already-running instance is manual:
+
+```bash
+cd /opt/fisheye-ui
+git pull origin main
+
+# Only needed if fisheye-ui.service changed - systemd runs off the copy in
+# /etc/systemd/system, not the repo, so edits to the tracked file alone
+# don't take effect.
+sudo cp deploy/gpu-worker/fisheye-ui.service /etc/systemd/system/fisheye-ui.service
+sudo systemctl daemon-reload
+
+# Only needed if frontend/ changed - fisheye_ui/static/ (what app.py serves
+# at "/") is gitignored build output, so a git pull alone won't update it.
+(cd frontend && npm install && npm run build)
+
+sudo systemctl restart fisheye-ui
+```
+
+If unsure which of the two conditional steps apply, it's harmless to run
+both. Then re-check with the same commands as [Verifying](#verifying) above.
