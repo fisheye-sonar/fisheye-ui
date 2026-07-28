@@ -268,6 +268,13 @@ export default function ProgressView({ jobId, onBack }) {
   const filesAttempted = filesComplete + filesFailed
   const filesSucceeded = jobFinished ? Math.max(filesTotal - filesFailed, 0) : filesComplete
 
+  // stage stays at its 'Connecting' default until the first real pipeline
+  // event (job_started) arrives - so as long as it hasn't moved, this job
+  // hasn't actually started yet. Combined with otherJobActive, that's a
+  // reliable "still waiting for a slot" signal (job_manager.py's
+  // MAX_CONCURRENT_JOBS) without needing to poll this job's own status.
+  const queued = !isTerminal && otherJobActive && stage === 'Connecting'
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-start justify-center py-12 px-4">
       <div className="w-full max-w-4xl">
@@ -275,7 +282,7 @@ export default function ProgressView({ jobId, onBack }) {
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
             <p className="text-gray-500 mt-1">
-              {cancelled ? 'Job cancelled.' : error ? 'Job failed.' : completed ? 'Job complete.' : 'Running inference…'}
+              {cancelled ? 'Job cancelled.' : error ? 'Job failed.' : completed ? 'Job complete.' : queued ? 'Waiting to start…' : 'Running inference…'}
             </p>
           </div>
           <button
@@ -292,7 +299,7 @@ export default function ProgressView({ jobId, onBack }) {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
           <div>
             <div className="flex justify-between items-baseline text-sm mb-2">
-              <span className="font-medium text-gray-700">{stage}</span>
+              <span className="font-medium text-gray-700">{queued ? 'Waiting' : stage}</span>
               <span className="flex items-center gap-2 text-gray-400 tabular-nums">
                 {filesTotal > 1 && (
                   <span>
@@ -343,7 +350,9 @@ export default function ProgressView({ jobId, onBack }) {
 
           {otherJobActive && !isTerminal && (
             <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
+              {queued
+                ? "Another job is currently processing on this computer. Yours will start automatically once it's done."
+                : 'Another job is currently processing on this computer too. Processing time may increase since they\'re running at the same time.'}
             </p>
           )}
 

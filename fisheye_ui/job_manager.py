@@ -19,6 +19,12 @@ from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
 
 logger = structlog.get_logger()
 
+# Limits how many jobs run concurrently. Jobs beyond this remain queued
+# (PENDING) until a slot is available. Defaults to 1 since a single shared
+# GPU typically performs better with serialized execution. Override with
+# FISHEYE_UI_MAX_CONCURRENT_JOBS.
+MAX_CONCURRENT_JOBS = int(os.environ.get("FISHEYE_UI_MAX_CONCURRENT_JOBS", "1"))
+
 
 def _raise_in_thread(tid: int, exc_type: type) -> None:
     """Inject an exception into a running thread at its next Python bytecode."""
@@ -53,6 +59,12 @@ class JobManager:
         # completion and cancellation) can race because they share the same
         # temporary file, causing one write to overwrite the other.
         self._persist_lock = threading.Lock()
+        # Bounds how many jobs run their actual pipeline work at once (see
+        # MAX_CONCURRENT_JOBS). A job still gets its own thread immediately
+        # on creation same as always; past the cap, that thread just blocks
+        # here before touching the GPU, so cancelling a queued job still
+        # works via the existing _raise_in_thread mechanism.
+        self._run_semaphore = threading.Semaphore(MAX_CONCURRENT_JOBS)
         self._reload_from_disk()
 
     def create_job(self, config: Union[Dict, DictConfig]) -> str:
@@ -230,32 +242,39 @@ class JobManager:
             from fisheye.common.logging import progress_queue as pq_var
             from fisheye.runner import run_job
 
-            job.status = JobStatus.RUNNING
-            self._persist(job)
-            _write_params_json(output_dir, job)
-            try:
-                pq_var.set(job.progress_queue)
-                run_job(job.config, job_id=job.id, configure_logging=True)
-            except (SystemExit, KeyboardInterrupt):
-                return  # cancelled via _raise_in_thread
-            except Exception as e:
-                job.error = str(e)
-                job.status = JobStatus.FAILED
+            # Jobs beyond MAX_CONCURRENT_JOBS wait here while remaining PENDING.
+            # If cancelled while waiting, the cancellation is handled immediately after
+            # acquiring the semaphore, releasing the slot without running the job.
+            with self._run_semaphore:
+                if job.status == JobStatus.CANCELLED:
+                    return
+
+                job.status = JobStatus.RUNNING
+                self._persist(job)
+                _write_params_json(output_dir, job)
+                try:
+                    pq_var.set(job.progress_queue)
+                    run_job(job.config, job_id=job.id, configure_logging=True)
+                except (SystemExit, KeyboardInterrupt):
+                    return  # cancelled via _raise_in_thread
+                except Exception as e:
+                    job.error = str(e)
+                    job.status = JobStatus.FAILED
+                    job.finished_at = datetime.utcnow()
+                    self._persist(job)
+                    return
+
+                if job.status == JobStatus.CANCELLED:
+                    return
+
+                job.results = _read_summary_csv(output_dir, job.id)
+                if job.results is None:
+                    job.error = "No files were processed. Output files may already exist in the output directory."
+                    job.status = JobStatus.FAILED
+                else:
+                    job.status = JobStatus.COMPLETED
                 job.finished_at = datetime.utcnow()
                 self._persist(job)
-                return
-
-            if job.status == JobStatus.CANCELLED:
-                return
-
-            job.results = _read_summary_csv(output_dir, job.id)
-            if job.results is None:
-                job.error = "No files were processed. Output files may already exist in the output directory."
-                job.status = JobStatus.FAILED
-            else:
-                job.status = JobStatus.COMPLETED
-            job.finished_at = datetime.utcnow()
-            self._persist(job)
         finally:
             _cleanup_upload_input(job)
 

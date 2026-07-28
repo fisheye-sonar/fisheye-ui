@@ -26,6 +26,7 @@ Environment=HOST=0.0.0.0
 # yet, survive a stop/start cycle. (Uploads still get cleaned up by the
 # same age-based sweep/per-job cleanup as before, just off durable disk.)
 Environment=FISHEYE_UI_UPLOAD_DIR=/opt/fisheye-ui/uploads
+Environment=FISHEYE_UI_MAX_CONCURRENT_JOBS=2
 ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
 Restart=on-failure
 RestartSec=5
