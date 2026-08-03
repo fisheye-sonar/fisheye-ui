@@ -86,6 +86,18 @@ function isNewer(latestTag, currentVersion) {
   return false
 }
 
+// The release page lists every platform's build with no guidance on which
+// to pick, so link straight to the asset matching the OS this app is
+// running on instead. Falls back to the release page if no matching asset
+// is published yet (e.g. no Windows build for this release).
+const ASSET_EXTENSION_BY_PLATFORM = { darwin: '.dmg', win32: '.exe' }
+
+function pickDownloadUrl(release) {
+  const extension = ASSET_EXTENSION_BY_PLATFORM[process.platform]
+  const asset = extension && release.assets.find(a => a.name.endsWith(extension))
+  return asset ? asset.browser_download_url : release.html_url
+}
+
 // Notifies the given window's renderer via IPC (see preload.js /
 // UpdateBanner.jsx) rather than showing a native OS dialog, so the update
 // notice looks like part of the app instead of a system popup.
@@ -103,7 +115,7 @@ async function checkForUpdate(win) {
 
   win.webContents.send('update-available', {
     version: release.tag_name,
-    url: release.html_url,
+    url: pickDownloadUrl(release),
   })
 }
 
