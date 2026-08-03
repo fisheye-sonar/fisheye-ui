@@ -1,10 +1,14 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, ipcMain, shell } = require('electron')
 const { spawn } = require('child_process')
 const http = require('http')
 const net = require('net')
 const path = require('path')
 const treeKill = require('tree-kill')
 const { checkForUpdate } = require('./updateCheck')
+
+// shell isn't reachable from the sandboxed preload script, so the renderer's
+// "Download" click is routed through here instead (see preload.js).
+ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
 
 // app.getName() defaults to package.json's "name" field ("fisheye-ui-electron"),
 // not the "FishEye" productName — override it so userData (where the backend's

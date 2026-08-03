@@ -2,7 +2,7 @@
 // so the frontend can use Electron's dialog API instead of the backend's
 // AppleScript/zenity pickers (which don't support Windows).
 
-const { contextBridge, webUtils, ipcRenderer, shell } = require('electron')
+const { contextBridge, webUtils, ipcRenderer } = require('electron')
 
 // Electron 32+ removed the non-standard File.path property from
 // drag-and-dropped files; webUtils.getPathForFile is the replacement, but
@@ -18,5 +18,7 @@ contextBridge.exposeInMainWorld('fisheyeElectron', {
   onUpdateAvailable: callback => {
     ipcRenderer.on('update-available', (_event, payload) => callback(payload))
   },
-  openExternal: url => shell.openExternal(url),
+  // shell isn't reachable directly from a sandboxed preload script, so this
+  // is routed through the main process instead (see main.js's ipcMain.handle).
+  openExternal: url => ipcRenderer.invoke('open-external', url),
 })

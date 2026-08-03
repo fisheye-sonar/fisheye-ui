@@ -1,7 +1,7 @@
 const { app } = require('electron')
 const https = require('https')
 
-const GITHUB_REPO = 'electron/electron' // TEMP: swap back after testing
+const GITHUB_REPO = 'fisheye-sonar/fisheye-ui'
 
 function fetchLatestRelease() {
   return new Promise((resolve, reject) => {
