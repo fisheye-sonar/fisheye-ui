@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import UpdateBanner from './UpdateBanner'
 
 const PLATFORM_PRESETS = {
   mps: {
@@ -226,6 +227,8 @@ export default function SubmitForm({ onJobCreated }) {
           <h1 className="text-2xl font-semibold text-gray-900">FishEye</h1>
           <p className="text-gray-500 mt-1">Predict salmon counts from ARIS and/or DIDSON sonar files.</p>
         </div>
+
+        <UpdateBanner />
 
         {temporaryGpuHosting && (
           <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-6">

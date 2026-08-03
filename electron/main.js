@@ -4,6 +4,7 @@ const http = require('http')
 const net = require('net')
 const path = require('path')
 const treeKill = require('tree-kill')
+const { checkForUpdate } = require('./updateCheck')
 
 // app.getName() defaults to package.json's "name" field ("fisheye-ui-electron"),
 // not the "FishEye" productName — override it so userData (where the backend's
@@ -98,6 +99,9 @@ async function createWindow() {
     },
   })
   win.loadURL(`http://127.0.0.1:${port}`)
+  // Wait for the page (and its update-available IPC listener) to be ready
+  // before sending, otherwise the event fires into nothing.
+  win.webContents.once('did-finish-load', () => checkForUpdate(win))
 }
 
 app.whenReady().then(() => {

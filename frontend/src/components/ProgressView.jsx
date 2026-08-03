@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ResultsPanel from './ResultsPanel'
+import UpdateBanner from './UpdateBanner'
 
 const STAGE_LABELS = {
   job_started: 'Starting',
@@ -295,6 +296,8 @@ export default function ProgressView({ jobId, onBack }) {
             New job
           </button>
         </div>
+
+        <UpdateBanner />
 
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
           <div>
