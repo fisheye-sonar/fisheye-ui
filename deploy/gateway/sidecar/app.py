@@ -175,13 +175,21 @@ def _idle_watcher_loop() -> None:
         if job_status["active"]:
             continue  # a job is pending/running - never stop
 
-        # No job running. Idle time is measured from the most recent job
-        # finishing, not from HTTP traffic - composing the form or reading
-        # a completed job's results isn't "activity" for auto-sleep. If no
-        # job has ever run this wake cycle, fall back to time since wake.
+        # No job is running. Measure idle time from the most recent job
+        # # finishing, not from HTTP traffic. Viewing completed results or
+        # # filling out the submission form shouldn't reset the auto-sleep
+        # # timer. If no job has finished during this wake cycle, fall back
+        # # to the time since the worker became ready.
         idle_seconds = job_status["idle_seconds"]
-        if idle_seconds is None:
-            idle_seconds = time.time() - ready_since if ready_since else 0
+        time_since_ready = time.time() - ready_since if ready_since else 0
+
+        # idle_seconds is persisted across restarts. If the last job finished
+        # before this wake cycle (e.., just before the idle watcher
+        # stopped the worker), the restored value could make the worker appear
+        # idle immediately after starting, before any new jobs can be submitted.
+        # Cap the idle time to the duration of the current wake cycle.
+        if idle_seconds is None or idle_seconds > time_since_ready:
+            idle_seconds = time_since_ready
 
         if idle_seconds < IDLE_TIMEOUT_SECONDS:
             continue
