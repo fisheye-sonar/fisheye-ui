@@ -120,6 +120,9 @@ export default function SubmitForm({ onJobCreated }) {
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [picking, setPicking] = useState(null)
+  // Set when the backend reports the target location already has
+  // predictions (409) - holds what to show in the confirmation dialog.
+  const [rerunConfirm, setRerunConfirm] = useState(null)
 
   async function browsePath(type) {
     setPicking(type)
@@ -171,6 +174,50 @@ export default function SubmitForm({ onJobCreated }) {
     )
   }
 
+  async function submitJob(confirmRerun) {
+    setError(null)
+    setSubmitting(true)
+
+    const platform = {
+      ...PLATFORM_PRESETS[device],
+      dataset: platformConfig,
+      model: { ...PLATFORM_PRESETS[device].model, weights: customWeightsPath.trim() || modelWeights },
+    }
+
+    const body = {
+      input_path: inputPath,
+      upstream_direction: upstreamDirection,
+      distance_offset: distanceOffset,
+      export_options: exportOptions,
+      platform,
+      ...(outputDir && { output_dir: outputDir }),
+      confirm_rerun: confirmRerun,
+    }
+
+    try {
+      const res = await fetch('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (res.status === 409) {
+        const { detail } = await res.json()
+        setRerunConfirm({
+          existingOutputDir: detail.existing_output_dir,
+          suggestedOutputDir: detail.suggested_output_dir,
+        })
+        return
+      }
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(typeof data.detail === 'string' ? data.detail : 'Failed to start job')
+      }
+      const { id } = await res.json()
+      setRerunConfirm(null)
+      onJobCreated(id)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError(null)
@@ -188,36 +235,7 @@ export default function SubmitForm({ onJobCreated }) {
       return
     }
 
-    setSubmitting(true)
-
-    const platform = {
-      ...PLATFORM_PRESETS[device],
-      dataset: platformConfig,
-      model: { ...PLATFORM_PRESETS[device].model, weights: customWeightsPath.trim() || modelWeights },
-    }
-
-    const body = {
-      input_path: inputPath,
-      upstream_direction: upstreamDirection,
-      distance_offset: distanceOffset,
-      export_options: exportOptions,
-      platform,
-      ...(outputDir && { output_dir: outputDir }),
-    }
-
-    try {
-      const res = await fetch('/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.detail ?? 'Failed to start job')
-      }
-      const { id } = await res.json()
-      onJobCreated(id)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setSubmitting(false)
-    }
+    await submitJob(false)
   }
 
   return (
@@ -617,6 +635,41 @@ export default function SubmitForm({ onJobCreated }) {
           </button>
         </form>
       </div>
+
+      {rerunConfirm && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-xl shadow-lg max-w-md w-full p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-gray-900">Predictions already exist</h2>
+            <div className="text-sm text-gray-600 space-y-2">
+              <p>This location already has results:</p>
+              <p className="font-mono text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 break-all">
+                {rerunConfirm.existingOutputDir}
+              </p>
+              <p>Rerunning will save new results to a fresh folder instead of overwriting them:</p>
+              <p className="font-mono text-xs bg-blue-50 border border-blue-200 rounded px-2 py-1.5 break-all text-blue-800">
+                {rerunConfirm.suggestedOutputDir}
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRerunConfirm(null)}
+                className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => submitJob(true)}
+                disabled={submitting}
+                className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-medium transition-colors"
+              >
+                {submitting ? 'Starting…' : 'Rerun Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
