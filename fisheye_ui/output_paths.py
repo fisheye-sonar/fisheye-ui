@@ -33,12 +33,7 @@ def next_available_output_dir(base_dir: Path) -> Path:
     it writes new results instead of overwriting existing ones or being
     silently skipped by FishEye's own already-processed check. Only used for
     confirmed reruns - a first run into an empty location still writes
-    directly to the exact folder the user chose, so non-technical users find
+    directly to the exact folder the user chose, so users find
     their output where they expect it.
-
-    The folder name's trailing ID doesn't need to match the eventual job's
-    own ID - that already shows up inside via {job_id}_params.json and
-    {job_id}_summary.csv, so this only needs to be unique and sortable by
-    when it ran.
     """
     return base_dir / f"{datetime.now().astimezone():%Y%m%d_%H%M%S}"

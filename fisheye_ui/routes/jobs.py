@@ -46,9 +46,8 @@ async def create_job(request: JobCreateRequest):
                     "suggested_output_dir": str(suggested_output_dir),
                 },
             )
-        # Confirmed: write the rerun to a fresh directory instead of
-        # overwriting existing results or having fisheye silently skip
-        # every file because the output already exists.
+        # Write the rerun to a new directory instead of overwriting existing results or having FishEye
+        # silently skip every file because the output already exists
         output_dir = suggested_output_dir
 
     config = request.model_dump(exclude={"confirm_rerun"})
