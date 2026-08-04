@@ -10,6 +10,10 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
 from fisheye_ui.enums import JobStatus
+from fisheye_ui.output_paths import (
+    has_existing_predictions,
+    next_available_output_dir,
+)
 from fisheye_ui.job_manager import job_manager
 from fisheye_ui.schemas import (
     JobCreateRequest,
@@ -24,8 +28,32 @@ router = APIRouter(prefix="/jobs", tags=["jobs"])
 
 @router.post("", response_model=JobCreatedResponse, status_code=201)
 async def create_job(request: JobCreateRequest):
-    job_id = job_manager.create_job(request.model_dump())
-    return JobCreatedResponse(id=job_id)
+    input_path = Path(request.input_path)
+    # Mirrors job_manager._run's own output_dir fallback so this check looks
+    # in the same place the pipeline will actually read/write.
+    output_dir = Path(
+        request.output_dir or (input_path if input_path.is_dir() else input_path.parent)
+    )
+
+    if has_existing_predictions(input_path, output_dir):
+        suggested_output_dir = next_available_output_dir(output_dir)
+        if not request.confirm_rerun:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Some files at this location already have predictions.",
+                    "existing_output_dir": str(output_dir),
+                    "suggested_output_dir": str(suggested_output_dir),
+                },
+            )
+        # Write the rerun to a new directory instead of overwriting existing results or having FishEye
+        # silently skip every file because the output already exists
+        output_dir = suggested_output_dir
+
+    config = request.model_dump(exclude={"confirm_rerun"})
+    config["output_dir"] = str(output_dir)
+    job_id = job_manager.create_job(config)
+    return JobCreatedResponse(id=job_id, output_dir=str(output_dir))
 
 
 @router.get("/active")

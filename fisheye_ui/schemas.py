@@ -20,6 +20,9 @@ class JobCreateRequest(BaseModel):
         ExportType.FC,
     ]
     platform: Dict[str, Any]
+    # Set once the user has confirmed they want to rerun over a location that
+    # already has predictions - see routes/jobs.py's create_job.
+    confirm_rerun: bool = False
 
 
 class JobResponse(BaseModel):
@@ -38,6 +41,7 @@ class JobCreatedResponse(BaseModel):
     """Job creation response schema."""
 
     id: str
+    output_dir: str
 
 
 class OutputFile(BaseModel):
