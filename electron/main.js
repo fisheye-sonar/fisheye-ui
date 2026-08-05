@@ -57,10 +57,13 @@ function getFreePort() {
 }
 
 function backendPath() {
+  // PyInstaller names the Windows binary with a .exe suffix; spawn() there
+  // needs the exact filename, unlike macOS/Linux which run it extension-less.
+  const exeName = process.platform === 'win32' ? 'fisheye-ui-backend.exe' : 'fisheye-ui-backend'
   // Packaged app: PyInstaller's onedir output ships as an extraResource.
   // Dev mode: point straight at the local PyInstaller build output.
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'backend', 'fisheye-ui-backend')
+    return path.join(process.resourcesPath, 'backend', exeName)
   }
   return path.join(
     __dirname,
@@ -69,7 +72,7 @@ function backendPath() {
     'pyinstaller',
     'dist',
     'fisheye-ui-backend',
-    'fisheye-ui-backend'
+    exeName
   )
 }
 
