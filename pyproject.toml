@@ -13,6 +13,7 @@ pydantic = "^2.13.4"
 setuptools = "<72"
 torch = "2.6.0"
 ultralytics = "8.3.74"
+pre-commit = "^4.6.1"
 
 
 [tool.poetry.scripts]
@@ -21,6 +22,10 @@ fisheye-ui = "fisheye_ui.app:main"
 [tool.poetry.group.dev.dependencies]
 black = "^26.5.1"
 pyinstaller = {version = "^6.21.0", python = ">=3.10,<3.16"}
+pytest = "^9.1.1"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [build-system]
 requires = ["poetry-core"]

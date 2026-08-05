@@ -1,115 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
+import {
+  applyProgressEvent,
+  deriveFileCounts,
+  formatConfigLines,
+  formatLogEntry,
+  initialProgressState,
+} from './progressUtils'
 import ResultsPanel from './ResultsPanel'
 import UpdateBanner from './UpdateBanner'
 
-const STAGE_LABELS = {
-  job_started: 'Starting',
-  initialized_detector: 'Loading model',
-  initialized_dataloader: 'Analyzing',
-  initialized_tracker: 'Tracking',
-  skip_length_estimation: 'Tracking',
-  initialized_counter: 'Counting',
-  processed_file_stats: 'Processing',
-  exported_detailed_csv: 'Exporting',
-  exported_summary_csv: 'Exporting',
-  exported_fc_txt: 'Exporting',
-  job_finished: 'Finishing',
-}
-
-const EXPORT_LABELS = {
-  summary_csv: 'Summary CSV',
-  detailed_csv: 'Detailed CSV',
-  fc: 'FC',
-  mot: 'MOT',
-}
-
-const DEVICE_LABELS = {
-  mps: 'Apple Silicon (MPS)',
-  'cuda:0': 'NVIDIA GPU (CUDA)',
-  cpu: 'CPU',
-}
-
-function formatConfigLines(config) {
-  if (!config) return []
-  const model = config.platform?.model ?? {}
-  return [
-    `Input file/folder: ${config.input_path?.replace(/\/+$/, '').split('/').pop() || '—'}`,
-    `Results folder: ${config.output_dir || 'same folder as input'}`,
-    `Model weights: ${model.weights ?? '—'}`,
-    `Device: ${DEVICE_LABELS[model.device] ?? model.device ?? '—'}`,
-    `Upstream direction: ${config.upstream_direction ?? '—'}`,
-    `Distance offset: ${config.distance_offset ?? 0} m`,
-    `Export options: ${(config.export_options ?? []).map(o => EXPORT_LABELS[o] ?? o).join(', ') || '—'}`,
-  ]
-}
-
-function parseDetectorProgress(event) {
-  const match = event?.match(/Progress:\s+([\d.]+)%\s+\((\d+)\/(\d+)\)/)
-  if (!match) return null
-  return { pct: parseFloat(match[1]), current: parseInt(match[2], 10), total: parseInt(match[3], 10) }
-}
-
-function formatLogEntry(data) {
-  switch (data.event) {
-    case 'job_started':
-      return data.detector_version
-        ? `Job started · detector ${data.detector_version}`
-        : 'Job started'
-    case 'initialized_detector':
-      return 'Detection model loaded'
-    case 'initialized_dataloader':
-      return `Loading ${data.dataset_size?.toLocaleString() ?? '?'} frames`
-    case 'initialized_tracker':
-      return 'Tracker ready'
-    case 'initialized_counter':
-      return 'Counter ready'
-    case 'processed_file_stats':
-      return `File complete · Total final count ${data.num_counts ?? 0}`
-    case 'no_counts':
-      return `No fish detected · ${data.file_path ? data.file_path.split('/').pop() : 'file'}`
-    case 'length_estimation_complete':
-      return `Length estimation · ${data.fish_with_valid_lengths}/${data.total_fish} fish measured`
-    case 'skip_length_estimation':
-      return data.message ?? 'Length estimation skipped'
-    case 'exported_detailed_csv':
-      return 'Exported detailed CSV'
-    case 'exported_summary_csv':
-      return 'Exported summary CSV'
-    case 'exported_fc_txt':
-      return 'Exported FC file'
-    case 'safe_execution_exception':
-      return `File failed · retrying (attempt ${data.attempt ?? '?'})`
-    case 'safe_execution_failed':
-      return `File failed after ${data.retries ?? 3} attempts · skipped`
-    case 'job_finished':
-      return data.duration_sec != null
-        ? `Job complete · ${Math.round(data.duration_sec)}s`
-        : 'Job complete'
-    default:
-      return data.event
-  }
-}
-
 export default function ProgressView({ jobId, onBack }) {
-  const [stage, setStage] = useState('Connecting')
-  const [detecting, setDetecting] = useState(false)
-  const [detectPct, setDetectPct] = useState(0)
-  const [detectFrames, setDetectFrames] = useState(null)
-  const [filesComplete, setFilesComplete] = useState(0)
-  const [filesFailed, setFilesFailed] = useState(0)
-  const [filesTotal, setFilesTotal] = useState(0)
-  const [logEntries, setLogEntries] = useState([])
+  const [progress, dispatch] = useReducer(applyProgressEvent, initialProgressState())
   const [configLines, setConfigLines] = useState([])
   const [showDetails, setShowDetails] = useState(false)
-  const [error, setError] = useState(null)
-  const [cancelled, setCancelled] = useState(false)
-  const [completed, setCompleted] = useState(false)
-  const [jobFinished, setJobFinished] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const logRef = useRef(null)
   const doneRef = useRef(false)
-  const datasetSizeRef = useRef(null)
-  const batchSizeRef = useRef(null)
 
   useEffect(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -118,92 +24,14 @@ export default function ProgressView({ jobId, onBack }) {
 
     ws.onmessage = (e) => {
       const data = JSON.parse(e.data)
-
-      if (data.event === 'done') {
-        doneRef.current = true
-        setDetecting(false)
-        if (data.status === 'completed') {
-          setStage('Complete')
-          setCompleted(true)
-        } else if (data.status === 'cancelled') {
-          setStage('Cancelled')
-          setCancelled(true)
-        } else {
-          setStage('Failed')
-          setError(data.error ?? 'Job failed')
-        }
-        return
-      }
-
-      if (data.event === 'files_discovered') {
-        setFilesTotal(data.num_files ?? 0)
-        return
-      }
-
-      // Detection progress — update bar only, don't log.
-      // The (current/total) in the debug message counts batches, not frames,
-      // so convert to a frame count using the batch/dataset size from
-      // initialized_dataloader. Last batch may be a partial one, so clamp to
-      // the dataset size rather than overshooting.
-      const progress = parseDetectorProgress(data.event)
-      if (progress !== null) {
-        setDetecting(true)
-        setDetectPct(progress.pct)
-        const datasetSize = datasetSizeRef.current
-        const batchSize = batchSizeRef.current
-        setDetectFrames(
-          datasetSize && batchSize
-            ? { current: Math.min(progress.current * batchSize, datasetSize), total: datasetSize }
-            : null
-        )
-        return
-      }
-
-      // File completion resets the detection bar for the next file
-      if (data.event === 'processed_file_stats' || data.event === 'no_counts') {
-        setFilesComplete(prev => prev + 1)
-        setDetecting(false)
-        setDetectPct(0)
-        setDetectFrames(null)
-      }
-
-      // A file that exhausted its retries is done being attempted — count it
-      // separately rather than inferring failures from filesTotal - filesComplete.
-      if (data.event === 'safe_execution_failed' && data.function === '_run') {
-        setFilesFailed(prev => prev + 1)
-        setDetecting(false)
-        setDetectPct(0)
-        setDetectFrames(null)
-      }
-
-      if (data.event === 'initialized_dataloader') {
-        setDetecting(false)
-        setDetectPct(0)
-        setDetectFrames(null)
-        datasetSizeRef.current = data.dataset_size ?? null
-        batchSizeRef.current = data.batch_size ?? null
-      }
-
-      // job_finished means the pipeline attempted every discovered file, even
-      // if the job is later marked failed for an unrelated reason (e.g. the
-      // summary CSV couldn't be found) — a reliable point to trust filesTotal.
-      if (data.event === 'job_finished') {
-        setJobFinished(true)
-      }
-
-      if (STAGE_LABELS[data.event]) {
-        setStage(STAGE_LABELS[data.event])
-      }
-
-      if (data.level !== 'debug') {
-        setLogEntries(prev => [...prev, data])
-      }
+      if (data.event === 'done') doneRef.current = true
+      dispatch(data)
     }
 
     let cleaned = false
 
     ws.onerror = () => {
-      if (!doneRef.current && !cleaned) setError('Lost connection to server')
+      if (!doneRef.current && !cleaned) dispatch({ event: '__connection_lost', error: 'Lost connection to server' })
     }
 
     return () => {
@@ -223,6 +51,12 @@ export default function ProgressView({ jobId, onBack }) {
       .catch(() => {})
     return () => { cancelled = true }
   }, [jobId])
+
+  const {
+    stage, detecting, detectPct, detectFrames,
+    filesComplete, filesFailed, filesTotal, logEntries,
+    completed, cancelled, error,
+  } = progress
 
   const isTerminal = cancelled || completed || !!error
   const [otherJobActive, setOtherJobActive] = useState(false)
@@ -259,15 +93,7 @@ export default function ProgressView({ jobId, onBack }) {
     }
   }
 
-  // filesComplete undercounts successes: the pipeline's per-file stats logging
-  // is wrapped in a bare except-pass, so a file can succeed and export without
-  // ever emitting processed_file_stats/no_counts. filesFailed (from the retry
-  // decorator's terminal safe_execution_failed log) doesn't have that gap, and
-  // job_finished guarantees every discovered file was attempted (regardless of
-  // whether the job is later marked completed or failed) — so once we've seen
-  // it, derive successes from the total instead of counting them directly.
-  const filesAttempted = filesComplete + filesFailed
-  const filesSucceeded = jobFinished ? Math.max(filesTotal - filesFailed, 0) : filesComplete
+  const { filesAttempted, filesSucceeded } = deriveFileCounts(progress)
 
   // stage stays at its 'Connecting' default until the first real pipeline
   // event (job_started) arrives - so as long as it hasn't moved, this job

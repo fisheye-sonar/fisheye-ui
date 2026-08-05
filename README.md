@@ -12,6 +12,7 @@ A web-based UI for running [FishEye](https://github.com/fisheye-sonar/fisheye/tr
 ```bash
 poetry install
 pyenv rehash  # if using pyenv, required to register the fisheye-ui command
+poetry run pre-commit install --hook-type pre-push  # run the test suite before every push
 ```
 
 ## To Run
