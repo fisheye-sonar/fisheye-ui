@@ -1,7 +1,3 @@
-// Phase 2 will expose a native file/folder picker here via contextBridge,
-// so the frontend can use Electron's dialog API instead of the backend's
-// AppleScript/zenity pickers (which don't support Windows).
-
 const { contextBridge, webUtils, ipcRenderer } = require('electron')
 
 // Electron 32+ removed the non-standard File.path property from
@@ -10,6 +6,12 @@ const { contextBridge, webUtils, ipcRenderer } = require('electron')
 // Works for dropped folders too (returns the folder's path).
 contextBridge.exposeInMainWorld('fisheyeElectron', {
   getPathForFile: file => webUtils.getPathForFile(file),
+
+  // Native file/folder pickers (see main.js) - work the same on every
+  // platform, unlike the backend's AppleScript/zenity routes which have no
+  // Windows equivalent. Resolves to a path string, or null if cancelled.
+  pickFile: () => ipcRenderer.invoke('pick-file'),
+  pickDirectory: () => ipcRenderer.invoke('pick-directory'),
 
   // Update notification: main process pushes 'update-available' once (see
   // updateCheck.js) after checking GitHub releases; the renderer shows it
