@@ -19,6 +19,12 @@ const PLATFORM_PRESETS = {
   },
 }
 
+// Electron always exposes a working native picker (dialog.showOpenDialog is
+// the same API on every OS), so it takes priority over the backend's
+// native_file_picker flag - which is false on Windows, where the backend
+// has no AppleScript/zenity equivalent (see fisheye_ui/routes/platform.py).
+const hasElectronPicker = typeof window !== 'undefined' && typeof window.fisheyeElectron?.pickFile === 'function'
+
 const BATCH_SIZE_OPTIONS = [1, 2, 4, 8, 16, 32, 64, 128]
 const MAX_WORKERS_OPTIONS = [1, 2, 4, 8, 16]
 
@@ -86,7 +92,7 @@ export default function SubmitForm({ onJobCreated }) {
           handleDeviceChange(data.device)
           setRecommendedDevice(data.device)
         }
-        if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(data.native_file_picker)
+        if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(hasElectronPicker || data.native_file_picker)
         if (Array.isArray(data.available_devices)) setAvailableDevices(data.available_devices)
         if (typeof data.temporary_gpu_hosting === 'boolean') setTemporaryGpuHosting(data.temporary_gpu_hosting)
       })
@@ -127,6 +133,16 @@ export default function SubmitForm({ onJobCreated }) {
   async function browsePath(type) {
     setPicking(type)
     try {
+      if (hasElectronPicker) {
+        const path = type === 'directory'
+          ? await window.fisheyeElectron.pickDirectory()
+          : await window.fisheyeElectron.pickFile()
+        if (path) {
+          setInputPath(path)
+          setInputLabel(path)
+        }
+        return
+      }
       const endpoint = type === 'directory' ? '/files/directory-selection' : '/files/file-selection'
       const res = await fetch(endpoint, { method: 'POST' })
       if (!res.ok) return
