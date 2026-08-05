@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const { spawn } = require('child_process')
 const http = require('http')
 const net = require('net')
@@ -9,6 +9,32 @@ const { checkForUpdate } = require('./updateCheck')
 // shell isn't reachable from the sandboxed preload script, so the renderer's
 // "Download" click is routed through here instead (see preload.js).
 ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
+
+// Native pickers, replacing the backend's OS-specific AppleScript/zenity
+// routes (fisheye_ui/routes/files.py) for anything running inside Electron.
+// dialog.showOpenDialog is the same API on every platform, so this is what
+// makes folder/file picking actually work on Windows (the backend route
+// there just 501s - no equivalent to osascript/zenity exists) instead of
+// only macOS/Linux. Registered against `win` so the dialog is a sheet/modal
+// on macOS rather than a detached window.
+ipcMain.handle('pick-file', async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Select an ARIS or DDF file',
+    properties: ['openFile'],
+    filters: [{ name: 'ARIS/DDF files', extensions: ['aris', 'ddf'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+ipcMain.handle('pick-directory', async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Select a folder containing ARIS or DDF files',
+    properties: ['openDirectory'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
 
 // app.getName() defaults to package.json's "name" field ("fisheye-ui-electron"),
 // not the "FishEye" productName — override it so userData (where the backend's
