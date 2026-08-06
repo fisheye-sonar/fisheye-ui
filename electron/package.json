@@ -22,6 +22,7 @@
   "build": {
     "appId": "com.fisheyesonar.fisheye-ui",
     "productName": "FishEye",
+    "compression": "normal",
     "directories": {
       "output": "release"
     },
@@ -46,7 +47,7 @@
       "icon": "build-resources/icon.ico",
       "target": [
         {
-          "target": "nsis",
+          "target": "zip",
           "arch": ["x64", "arm64"]
         }
       ]
