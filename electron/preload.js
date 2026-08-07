@@ -23,4 +23,22 @@ contextBridge.exposeInMainWorld('fisheyeElectron', {
   // shell isn't reachable directly from a sandboxed preload script, so this
   // is routed through the main process instead (see main.js's ipcMain.handle).
   openExternal: url => ipcRenderer.invoke('open-external', url),
+
+  // Windows-only first-run GPU (CUDA) runtime setup, exercised only when
+  // gpuSetup.js's isGpuRuntimeInstalled() says the CUDA libraries weren't
+  // downloaded yet (see setup.html/setup.js). Errors are reported via
+  // onGpuSetupError rather than a rejected promise, since the setup itself
+  // runs to completion (success or failure) inside the ipcMain.handle.
+  startGpuSetupDownload: () => ipcRenderer.invoke('gpu-setup-download'),
+  startGpuSetupFromFile: filePath => ipcRenderer.invoke('gpu-setup-from-file', filePath),
+  pickGpuRuntimeFile: () => ipcRenderer.invoke('pick-gpu-runtime-file'),
+  onGpuSetupProgress: callback => {
+    ipcRenderer.on('gpu-setup-progress', (_event, payload) => callback(payload))
+  },
+  onGpuSetupError: callback => {
+    ipcRenderer.on('gpu-setup-error', (_event, payload) => callback(payload))
+  },
+  onGpuSetupComplete: callback => {
+    ipcRenderer.on('gpu-setup-complete', () => callback())
+  },
 })

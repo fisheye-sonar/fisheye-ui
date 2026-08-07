@@ -58,3 +58,40 @@ Currently unsigned: macOS Gatekeeper will show an "unidentified developer" or a 
 warning on first launch (right-click → Open bypasses it). Code
 signing/notarization is a later step (needs a paid Apple Developer
 certificate). If that doesn't work, open the terminal and run: `xattr -cr /path/to/FishEye.app `
+
+## Building the final app (Windows)
+
+The Windows PyInstaller build includes CUDA-enabled torch (GPU support),
+which alone is ~4.4GB — well over the ~2GB payload limit of the NSIS
+compiler electron-builder bundles (`makensis`; it fails with `Internal
+compiler error #12345: error mmapping file ... is out of range` on
+anything bigger). `split_gpu_runtime.py` pulls the CUDA/cuDNN libraries out
+into a separate archive before electron-builder ever runs, so the installer
+itself stays small; `gpuSetup.js` downloads that archive (or loads it from
+a local file, for machines with no internet access) the first time the
+packaged app launches.
+
+```bash
+cd frontend && npm run build && cd ..
+
+poetry run pyinstaller packaging/pyinstaller/fisheye_ui.spec --noconfirm \
+  --distpath packaging/pyinstaller/dist \
+  --workpath packaging/pyinstaller/build
+
+poetry run python packaging/pyinstaller/split_gpu_runtime.py
+
+cd electron
+npm run build:win
+```
+
+Output:
+- `release/FishEye Setup <version>.exe` — the installer, now under ~1GB.
+- `packaging/pyinstaller/dist/fisheye-ui-gpu-runtime-win.zip` — the CUDA
+  runtime, ~2.7GB, produced by the split step above.
+
+**Both files need to be uploaded as assets on the GitHub release** (the
+installer downloads the second one by exact filename match against the
+release tag — see `gpuSetup.js`). Re-run `split_gpu_runtime.py` for every
+release that touches the PyInstaller build, even if torch's version hasn't
+changed, so the embedded checksum always matches what's attached to that
+tag.

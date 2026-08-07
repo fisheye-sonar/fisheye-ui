@@ -13,6 +13,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "extract-zip": "^2.0.1",
     "tree-kill": "^1.2.2"
   },
   "allowScripts": {
@@ -30,6 +31,10 @@
       "main.js",
       "preload.js",
       "updateCheck.js",
+      "gpuSetup.js",
+      "setup.html",
+      "setup.js",
+      "resources/gpu-runtime.manifest.json",
       "package.json"
     ],
     "extraResources": [
@@ -40,15 +45,21 @@
     ],
     "mac": {
       "icon": "build-resources/icon.icns",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.utilities"
     },
     "win": {
       "icon": "build-resources/icon.ico",
       "target": [
         {
-          "target": "zip",
-          "arch": ["x64", "arm64"]
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
     }

@@ -5,6 +5,7 @@ const net = require('net')
 const path = require('path')
 const treeKill = require('tree-kill')
 const { checkForUpdate } = require('./updateCheck')
+const { isGpuRuntimeInstalled, runDownloadSetup, runFileSetup } = require('./gpuSetup')
 
 // shell isn't reachable from the sandboxed preload script, so the renderer's
 // "Download" click is routed through here instead (see preload.js).
@@ -35,6 +36,62 @@ ipcMain.handle('pick-directory', async () => {
   if (result.canceled || result.filePaths.length === 0) return null
   return result.filePaths[0]
 })
+
+// --- Windows-only first-run GPU (CUDA) runtime setup, see gpuSetup.js ---
+
+let gpuSetupWindow = null
+let resolveGpuSetup = null
+
+ipcMain.handle('pick-gpu-runtime-file', async () => {
+  const result = await dialog.showOpenDialog(gpuSetupWindow, {
+    title: 'Select the FishEye GPU runtime file',
+    properties: ['openFile'],
+    filters: [{ name: 'GPU runtime archive', extensions: ['zip'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
+
+async function runGpuSetupAction(action, ...args) {
+  const sendProgress = progress => gpuSetupWindow?.webContents.send('gpu-setup-progress', progress)
+  try {
+    await action(...args, sendProgress)
+    gpuSetupWindow.webContents.send('gpu-setup-complete')
+    const resolve = resolveGpuSetup
+    resolveGpuSetup = null
+    gpuSetupWindow.close()
+    resolve()
+  } catch (err) {
+    gpuSetupWindow?.webContents.send('gpu-setup-error', { message: err.message })
+  }
+}
+
+ipcMain.handle('gpu-setup-download', () => runGpuSetupAction(runDownloadSetup))
+ipcMain.handle('gpu-setup-from-file', (_event, filePath) => runGpuSetupAction(runFileSetup, filePath))
+
+// Opens the setup window and resolves once runGpuSetupAction reports
+// success. Closing the window before that (user quits mid-setup) rejects
+// instead, since resolveGpuSetup is still set at that point.
+function openGpuSetupWindow() {
+  return new Promise((resolve, reject) => {
+    resolveGpuSetup = resolve
+    gpuSetupWindow = new BrowserWindow({
+      width: 440,
+      height: 300,
+      resizable: false,
+      webPreferences: { preload: path.join(__dirname, 'preload.js') },
+    })
+    gpuSetupWindow.setMenuBarVisibility(false)
+    gpuSetupWindow.loadFile(path.join(__dirname, 'setup.html'))
+    gpuSetupWindow.on('closed', () => {
+      gpuSetupWindow = null
+      if (resolveGpuSetup) {
+        resolveGpuSetup = null
+        reject(new Error('Setup was closed before finishing'))
+      }
+    })
+  })
+}
 
 // app.getName() defaults to package.json's "name" field ("fisheye-ui-electron"),
 // not the "FishEye" productName — override it so userData (where the backend's
@@ -76,7 +133,7 @@ function backendPath() {
   )
 }
 
-function waitForHealth(port, timeoutMs = 30000) {
+function waitForHealth(port, timeoutMs = 120000) {
   const deadline = Date.now() + timeoutMs
   return new Promise((resolve, reject) => {
     function attempt() {
@@ -107,10 +164,24 @@ async function startBackend() {
     // working directory — typically "/" — where that write fails with
     // EROFS. userData is guaranteed to exist and be writable.
     cwd: app.getPath('userData'),
-    stdio: 'inherit',
+    // stdio:'inherit' plus windowsHide alone doesn't suppress the console
+    // window PyInstaller's console=True bootloader used to allocate on
+    // Windows (fixed by building with console=False instead - see
+    // packaging/pyinstaller/fisheye_ui.spec), since Electron's own GUI
+    // process has no console of its own for the child to inherit in the
+    // first place. Piping instead avoids needing a console handle at all;
+    // forwarding the pipes below keeps `npm start`'s terminal output
+    // working exactly like 'inherit' did.
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
   })
-  // torch's import time on first launch can be slow, hence the generous
-  // waitForHealth timeout above rather than a fixed startup delay.
+  backendProcess.stdout.on('data', chunk => process.stdout.write(chunk))
+  backendProcess.stderr.on('data', chunk => process.stderr.write(chunk))
+  // torch's import time can be slow, and - especially right after GPU
+  // runtime setup - the first launch to actually touch ~2.3GB of freshly
+  // extracted, unfamiliar DLLs can get held up by Windows Defender scanning
+  // them, hence the generous waitForHealth timeout above rather than a
+  // fixed startup delay.
   await waitForHealth(port)
   return port
 }
@@ -137,7 +208,7 @@ async function createWindow() {
   win.webContents.once('did-finish-load', () => checkForUpdate(win))
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Packaged builds get their icon from the .icns embedded by electron-builder
   // (build.mac.icon) — dev mode otherwise falls back to the generic Electron
   // icon in the Dock, so set it explicitly here too.
@@ -145,10 +216,32 @@ app.whenReady().then(() => {
     app.dock.setIcon(path.join(__dirname, 'build-resources', 'icon.png'))
   }
 
-  createWindow().catch(err => {
+  // The CUDA libraries are kept out of the Windows installer (see
+  // packaging/pyinstaller/split_gpu_runtime.py) to stay under NSIS's ~2GB
+  // payload limit, and fetched here instead, once, before the backend ever
+  // starts. Dev mode runs straight off the local PyInstaller output, which
+  // isn't split, so this only applies to packaged Windows builds.
+  if (process.platform === 'win32' && app.isPackaged && !isGpuRuntimeInstalled()) {
+    try {
+      await openGpuSetupWindow()
+    } catch (err) {
+      console.error('GPU runtime setup did not complete:', err)
+      dialog.showErrorBox('FishEye setup did not finish', err.message)
+      app.quit()
+      return
+    }
+  }
+
+  try {
+    await createWindow()
+  } catch (err) {
+    // Silently quitting here means a slow/failed backend start looks
+    // exactly like the app never opened at all, with no way to tell why -
+    // show the real reason instead.
     console.error('Failed to start backend:', err)
+    dialog.showErrorBox('FishEye failed to start', err.message)
     app.quit()
-  })
+  }
 })
 
 app.on('window-all-closed', () => {
