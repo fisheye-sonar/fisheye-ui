@@ -35,7 +35,8 @@
       "setup.html",
       "setup.js",
       "resources/gpu-runtime.manifest.json",
-      "package.json"
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
