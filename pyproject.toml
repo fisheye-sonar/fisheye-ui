@@ -11,7 +11,6 @@ fisheye = {git = "https://github.com/fisheye-sonar/fisheye.git"}
 fastapi = {extras = ["standard"], version = "^0.138.0"}
 pydantic = "^2.13.4"
 setuptools = "<72"
-#torch = "2.6.0"
 torch = [
     { version = "2.6.0", source = "pytorch-cu124", markers = "sys_platform == 'win32'" },
     { version = "2.6.0", markers = "sys_platform != 'win32'" },
