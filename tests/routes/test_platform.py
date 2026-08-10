@@ -36,6 +36,24 @@ class TestDeviceAvailability:
         assert devices == ["cpu", "cuda", "mps"]
 
 
+class TestOsName:
+    def test_darwin(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "darwin")
+        assert platform_module._os_name() == "darwin"
+
+    def test_windows(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "win32")
+        assert platform_module._os_name() == "windows"
+
+    def test_linux(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "linux")
+        assert platform_module._os_name() == "linux"
+
+    def test_other_platform_falls_back(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "freebsd13")
+        assert platform_module._os_name() == "other"
+
+
 class TestNativeFilePickerAvailable:
     def test_darwin_is_always_true(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "darwin")

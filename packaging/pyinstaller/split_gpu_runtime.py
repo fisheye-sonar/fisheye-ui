@@ -22,6 +22,7 @@ kept file that imports a moved file has to move too, repeated to a fixed
 point. That makes the split correct by construction and lets it survive
 torch version bumps that might change this dependency graph.
 """
+
 import fnmatch
 import hashlib
 import json
@@ -63,7 +64,8 @@ def imported_dll_names(path: Path) -> set[str]:
         if not hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
             return set()
         return {
-            entry.dll.decode("ascii", "ignore").lower() for entry in pe.DIRECTORY_ENTRY_IMPORT
+            entry.dll.decode("ascii", "ignore").lower()
+            for entry in pe.DIRECTORY_ENTRY_IMPORT
         }
     finally:
         pe.close()
@@ -139,7 +141,9 @@ def main() -> None:
             dropped_lib_bytes += entry.stat().st_size
             entry.unlink()
 
-    dll_files = [f for f in TORCH_LIB_DIR.iterdir() if f.is_file() and f.suffix == ".dll"]
+    dll_files = [
+        f for f in TORCH_LIB_DIR.iterdir() if f.is_file() and f.suffix == ".dll"
+    ]
     to_move = compute_cuda_closure(dll_files)
 
     if not to_move:
@@ -170,7 +174,9 @@ def main() -> None:
 
     manifest_parts = []
     for i, part_files in enumerate(parts, start=1):
-        part_zip = DIST_ROOT / f"FishEye-{version}-gpu-runtime-win.part{i}-of-{len(parts)}.zip"
+        part_zip = (
+            DIST_ROOT / f"FishEye-{version}-gpu-runtime-win.part{i}-of-{len(parts)}.zip"
+        )
         with zipfile.ZipFile(part_zip, "w", zipfile.ZIP_DEFLATED) as zf:
             for f in sorted(part_files):
                 zf.write(f, arcname=f.name)
@@ -182,11 +188,13 @@ def main() -> None:
                 "asset limit even after splitting - lower BIN_PACK_TARGET_BYTES "
                 "and rerun."
             )
-        manifest_parts.append({
-            "filename": part_zip.name,
-            "sha256": sha256_of(part_zip),
-            "sizeBytes": size,
-        })
+        manifest_parts.append(
+            {
+                "filename": part_zip.name,
+                "sha256": sha256_of(part_zip),
+                "sizeBytes": size,
+            }
+        )
         print(f"Wrote {part_zip} ({size / 1e9:.2f}GB)")
 
     manifest = {"version": version, "parts": manifest_parts}

@@ -1,32 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import UpdateBanner from './UpdateBanner'
-
-const PLATFORM_PRESETS = {
-  mps: {
-    dataset: { batch_size: 16, workers: 0, use_multithreading: true, max_workers: 2, use_blur: true },
-    model: { type: 'yolov5', device: 'mps' },
-    inference: { use_multithreading: true, max_workers: 2, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-  cuda: {
-    dataset: { batch_size: 32, workers: 10, use_multithreading: false, max_workers: 4, use_blur: true },
-    model: { type: 'yolov5', device: 'cuda:0' },
-    inference: { use_multithreading: false, max_workers: 4, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-  cpu: {
-    dataset: { batch_size: 1, workers: 0, use_multithreading: false, max_workers: 1, use_blur: true },
-    model: { type: 'yolov5', device: 'cpu' },
-    inference: { use_multithreading: false, max_workers: 1, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-}
+import { BATCH_SIZE_OPTIONS, MAX_WORKERS_OPTIONS, PLATFORM_PRESETS, WORKERS_OPTIONS, presetKeyFor } from './platformPresets'
 
 // Electron always exposes a working native picker (dialog.showOpenDialog is
 // the same API on every OS), so it takes priority over the backend's
 // native_file_picker flag - which is false on Windows, where the backend
 // has no AppleScript/zenity equivalent (see fisheye_ui/routes/platform.py).
 const hasElectronPicker = typeof window !== 'undefined' && typeof window.fisheyeElectron?.pickFile === 'function'
-
-const BATCH_SIZE_OPTIONS = [1, 2, 4, 8, 16, 32, 64, 128]
-const MAX_WORKERS_OPTIONS = [1, 2, 4, 8, 16]
 
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
@@ -55,6 +35,10 @@ export default function SubmitForm({ onJobCreated }) {
   const [modelWeights, setModelWeights] = useState(MODEL_CATALOG[0].value)
   const [customWeightsPath, setCustomWeightsPath] = useState('')
   const [device, setDevice] = useState('mps')
+  // What /platform reported as sys.platform, normalized to
+  // 'windows' | 'darwin' | 'linux' | 'other'. Only used to disambiguate the
+  // cuda preset (see presetKeyFor) - not shown in the UI.
+  const [detectedOs, setDetectedOs] = useState(null)
   const [platformConfig, setPlatformConfig] = useState(PLATFORM_PRESETS.mps.dataset)
   // Defaults to true so desktop's UI doesn't flash to the upload variant
   // before this resolves; a remote worker flips it to false once /platform responds.
@@ -71,9 +55,9 @@ export default function SubmitForm({ onJobCreated }) {
   const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef(null)
 
-  function handleDeviceChange(newDevice) {
+  function handleDeviceChange(newDevice, os) {
     setDevice(newDevice)
-    setPlatformConfig(PLATFORM_PRESETS[newDevice].dataset)
+    setPlatformConfig(PLATFORM_PRESETS[presetKeyFor(newDevice, os)].dataset)
   }
 
   function setPlatformField(field, value) {
@@ -88,8 +72,9 @@ export default function SubmitForm({ onJobCreated }) {
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (cancelled || !data) return
+        if (typeof data.os === 'string') setDetectedOs(data.os)
         if (data.device) {
-          handleDeviceChange(data.device)
+          handleDeviceChange(data.device, data.os)
           setRecommendedDevice(data.device)
         }
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(hasElectronPicker || data.native_file_picker)
@@ -194,10 +179,11 @@ export default function SubmitForm({ onJobCreated }) {
     setError(null)
     setSubmitting(true)
 
+    const preset = PLATFORM_PRESETS[presetKeyFor(device, detectedOs)]
     const platform = {
-      ...PLATFORM_PRESETS[device],
+      ...preset,
       dataset: platformConfig,
-      model: { ...PLATFORM_PRESETS[device].model, weights: customWeightsPath.trim() || modelWeights },
+      model: { ...preset.model, weights: customWeightsPath.trim() || modelWeights },
     }
 
     const body = {
@@ -440,7 +426,7 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
               <select
                 value={device}
-                onChange={e => handleDeviceChange(e.target.value)}
+                onChange={e => handleDeviceChange(e.target.value, detectedOs)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="mps" disabled={!availableDevices.includes('mps')}>
@@ -612,6 +598,31 @@ export default function SubmitForm({ onJobCreated }) {
                       className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
                       {MAX_WORKERS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <label className="block text-sm font-medium text-gray-700">Dataloader workers</label>
+                      <div className="relative group">
+                        <svg className="w-4 h-4 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" fill="currentColor" />
+                          <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                          <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                          Background processes that load data in parallel. Higher can speed things up on Linux, but on Windows this should usually stay 0 - each one is expensive to start there regardless of CPU count.
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                        </div>
+                      </div>
+                    </div>
+                    <select
+                      value={platformConfig.workers}
+                      onChange={e => setPlatformField('workers', parseInt(e.target.value))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {WORKERS_OPTIONS.map(n => (
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
