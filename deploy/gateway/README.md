@@ -60,7 +60,9 @@ below is just for general debugging if you want it.)
 ```
 your-hostname {
 	basic_auth {
-		username $YourExistingHashHere
+		admin $YourExistingHashHere
+		researcher1@example.com $AnotherHashHere
+		researcher2@example.com $AnotherHashHere
 	}
 
 	@sidecar path /gateway-status /gateway-wake
@@ -70,6 +72,7 @@ your-hostname {
 
 	handle {
 		reverse_proxy GPU_WORKER_PRIVATE_IP:8000 {
+			header_up X-Fisheye-User {http.auth.user.id}
 			fail_duration 10s
 		}
 	}
@@ -91,6 +94,21 @@ wake (which costs real GPU-hours) without valid credentials. The
 `@sidecar` matcher routes just those two paths to the sidecar; everything
 else still proxies to the GPU worker as before, falling back to the wake
 page only when that proxy fails.
+
+`basic_auth` supports multiple username/hash pairs - one entry per person,
+username set to their email, generated with `caddy hash-password`. There's
+no self-serve signup: provisioning a new user means adding a line here and
+reloading Caddy (`sudo caddy validate --config /etc/caddy/Caddyfile &&
+sudo systemctl reload caddy`), same as the original single-account setup.
+
+`header_up X-Fisheye-User {http.auth.user.id}` forwards the authenticated
+username to the app, which is what lets it enforce a per-account job limit
+(10 jobs per username by default, persisted across sessions - see
+`fisheye_ui/usage.py`). The one pre-existing shared account (`admin` above)
+should be set as `FISHEYE_UI_UNLIMITED_USER` in `fisheye-ui.service` on the
+GPU worker so it keeps unlimited runs; every other username is capped. A
+request with no `X-Fisheye-User` header (e.g. local/desktop use, which has
+no Caddy in front at all) is never limited.
 
 After editing, same as always:
 ```bash

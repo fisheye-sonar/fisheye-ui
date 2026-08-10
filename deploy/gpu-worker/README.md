@@ -29,6 +29,13 @@ This installs Python/Poetry, clones the repo to `/opt/fisheye-ui`, runs
 `poetry install`, checks whether the installed `torch` picked up
 the GPU, and installs + starts the systemd service.
 
+Before (or after) running it, edit `fisheye-ui.service`'s
+`FISHEYE_UI_UNLIMITED_USER` to match the username of the one pre-existing
+shared Caddy `basic_auth` credential (see `deploy/gateway/README.md`) - that
+account keeps unlimited job runs; every other username Caddy forwards is
+capped at `FISHEYE_UI_MAX_JOBS_PER_USER` (default 10, persisted across
+sessions).
+
 ## Verifying
 
 ```bash

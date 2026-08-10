@@ -6,9 +6,10 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 
+from fisheye_ui import usage
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.output_paths import (
     has_existing_predictions,
@@ -25,9 +26,22 @@ from fisheye_ui.schemas import (
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+# Set by Caddy's basic_auth on the cloud deployment (forwarded as the
+# authenticated username - see deploy/gateway/README.md) so per-account job
+# limits can be enforced. Absent for desktop/local use, where nothing sits
+# in front of this app to authenticate a username - see usage.is_limited.
+USER_HEADER = "X-Fisheye-User"
+
 
 @router.post("", response_model=JobCreatedResponse, status_code=201)
-async def create_job(request: JobCreateRequest):
+async def create_job(request: JobCreateRequest, http_request: Request):
+    username = http_request.headers.get(USER_HEADER, "")
+    if usage.is_limited(username) and usage.jobs_used(username) >= usage.MAX_JOBS_PER_USER:
+        raise HTTPException(
+            status_code=403,
+            detail=f"This account has reached its limit of {usage.MAX_JOBS_PER_USER} jobs.",
+        )
+
     input_path = Path(request.input_path)
     # Mirrors job_manager._run's own output_dir fallback so this check looks
     # in the same place the pipeline will actually read/write.
@@ -53,6 +67,8 @@ async def create_job(request: JobCreateRequest):
     config = request.model_dump(exclude={"confirm_rerun"})
     config["output_dir"] = str(output_dir)
     job_id = job_manager.create_job(config)
+    if usage.is_limited(username):
+        usage.record_job(username)
     return JobCreatedResponse(id=job_id, output_dir=str(output_dir))
 
 

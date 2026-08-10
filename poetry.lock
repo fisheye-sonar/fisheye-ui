@@ -955,7 +955,7 @@ test = ["hypothesis (<6.136.0)", "levenshtein (<=0.27.1)", "pip", "pylint (<3.3.
 
 [[package]]
 name = "fisheye"
-version = "1.0.0-beta.5"
+version = "1.0.0-beta.6"
 description = "Performing inference on sonar data."
 optional = false
 python-versions = "^3.10"
@@ -980,7 +980,7 @@ yolov5 = "^7.0.14"
 type = "git"
 url = "https://github.com/fisheye-sonar/fisheye.git"
 reference = "HEAD"
-resolved_reference = "02b50a498af88fa77464754169a06346136d9606"
+resolved_reference = "c9badc50706c64888366d82a6f9c17269e463a44"
 
 [[package]]
 name = "fonttools"

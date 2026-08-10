@@ -27,6 +27,12 @@ Environment=HOST=0.0.0.0
 # same age-based sweep/per-job cleanup as before, just off durable disk.)
 Environment=FISHEYE_UI_UPLOAD_DIR=/opt/fisheye-ui/uploads
 Environment=FISHEYE_UI_MAX_CONCURRENT_JOBS=2
+# Per-account job limit (see fisheye_ui/usage.py) - only enforced for
+# requests carrying the X-Fisheye-User header, which Caddy's basic_auth sets
+# (see deploy/gateway/README.md). Must match the username of the one
+# pre-existing shared Caddy credential to keep it unlimited.
+Environment=FISHEYE_UI_UNLIMITED_USER=REPLACE_ME
+Environment=FISHEYE_UI_MAX_JOBS_PER_USER=10
 ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
 Restart=on-failure
 RestartSec=5
