@@ -20,13 +20,14 @@ function showProgress() {
   setPhase('downloading', 0, 0)
 }
 
-function setPhase(phase, downloaded, total) {
+function setPhase(phase, downloaded, total, partIndex, totalParts) {
   const labels = {
     downloading: 'Downloading…',
     verifying: 'Verifying…',
     extracting: 'Extracting…',
   }
-  statusPhase.textContent = labels[phase] || 'Working…'
+  const label = labels[phase] || 'Working…'
+  statusPhase.textContent = totalParts > 1 ? `${label} (part ${partIndex} of ${totalParts})` : label
 
   if (phase === 'extracting' || !total) {
     barFill.classList.add('indeterminate')
@@ -54,10 +55,10 @@ document.getElementById('download-btn').addEventListener('click', () => {
 })
 
 document.getElementById('local-file-btn').addEventListener('click', async () => {
-  const filePath = await window.fisheyeElectron.pickGpuRuntimeFile()
-  if (!filePath) return
+  const filePaths = await window.fisheyeElectron.pickGpuRuntimeFiles()
+  if (!filePaths || filePaths.length === 0) return
   showProgress()
-  window.fisheyeElectron.startGpuSetupFromFile(filePath)
+  window.fisheyeElectron.startGpuSetupFromFiles(filePaths)
 })
 
 document.getElementById('retry-btn').addEventListener('click', () => {
@@ -65,8 +66,8 @@ document.getElementById('retry-btn').addEventListener('click', () => {
   screenInitial.classList.add('active')
 })
 
-window.fisheyeElectron.onGpuSetupProgress(({ phase, downloaded, total }) => {
-  setPhase(phase, downloaded, total)
+window.fisheyeElectron.onGpuSetupProgress(({ phase, downloaded, total, partIndex, totalParts }) => {
+  setPhase(phase, downloaded, total, partIndex, totalParts)
 })
 
 window.fisheyeElectron.onGpuSetupError(({ message }) => {

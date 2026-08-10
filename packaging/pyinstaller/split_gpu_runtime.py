@@ -36,7 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DIST_DIR = REPO_ROOT / "packaging" / "pyinstaller" / "dist" / "fisheye-ui-backend"
 TORCH_LIB_DIR = DIST_DIR / "_internal" / "torch" / "lib"
 GPU_RUNTIME_STAGE_DIR = REPO_ROOT / "packaging" / "pyinstaller" / "dist" / "gpu-runtime"
-GPU_RUNTIME_ZIP = REPO_ROOT / "packaging" / "pyinstaller" / "dist" / "fisheye-ui-gpu-runtime-win.zip"
+DIST_ROOT = REPO_ROOT / "packaging" / "pyinstaller" / "dist"
 MANIFEST_PATH = REPO_ROOT / "electron" / "resources" / "gpu-runtime.manifest.json"
 ELECTRON_PACKAGE_JSON = REPO_ROOT / "electron" / "package.json"
 
@@ -93,6 +93,34 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
+# GitHub rejects release assets over 2GB outright. The whole CUDA runtime
+# compresses to ~2.3GB as a single zip, just over that - split it into
+# multiple parts instead of chasing a compression scheme that might not
+# get under the limit. BIN_PACK_TARGET_BYTES is deliberately well below
+# GITHUB_ASSET_LIMIT_BYTES and based on *uncompressed* size, so every part
+# lands safely under the real limit even in the worst case of a file that
+# doesn't compress at all.
+GITHUB_ASSET_LIMIT_BYTES = 2_000_000_000
+BIN_PACK_TARGET_BYTES = 1_800_000_000
+
+
+def bin_pack(files: list[Path], target_bytes: int) -> list[list[Path]]:
+    """Greedy largest-file-first bin packing: repeatedly drop the biggest
+    remaining file into whichever bucket currently has the least in it.
+    Simple and good enough here - the file size distribution (one ~900MB
+    file, a handful of ~100-500MB files, many small ones) doesn't need
+    anything fancier to balance well."""
+    total = sum(f.stat().st_size for f in files)
+    num_parts = max(1, -(-total // target_bytes))  # ceil division
+    buckets: list[list[Path]] = [[] for _ in range(num_parts)]
+    bucket_totals = [0] * num_parts
+    for f in sorted(files, key=lambda f: f.stat().st_size, reverse=True):
+        i = bucket_totals.index(min(bucket_totals))
+        buckets[i].append(f)
+        bucket_totals[i] += f.stat().st_size
+    return [b for b in buckets if b]
+
+
 def main() -> None:
     if not TORCH_LIB_DIR.is_dir():
         sys.exit(f"{TORCH_LIB_DIR} not found — run the PyInstaller build first.")
@@ -129,25 +157,44 @@ def main() -> None:
         print(f"  {name}")
     print(f"Dropped {dropped_lib_bytes / 1e6:.0f}MB of unused link-time .lib files")
 
-    if GPU_RUNTIME_ZIP.exists():
-        GPU_RUNTIME_ZIP.unlink()
-    with zipfile.ZipFile(GPU_RUNTIME_ZIP, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(GPU_RUNTIME_STAGE_DIR.iterdir()):
-            zf.write(f, arcname=f.name)
-
+    # Matches electron-builder's own artifact naming (FishEye-<version>-win.zip,
+    # FishEye-<version>-arm64.dmg, ...) so a version is visible at a glance -
+    # important for the offline/local-file setup path, where someone may end
+    # up with more than one version's archives sitting on a USB drive.
     version = json.loads(ELECTRON_PACKAGE_JSON.read_text())["version"]
-    manifest = {
-        "version": version,
-        "filename": GPU_RUNTIME_ZIP.name,
-        "sha256": sha256_of(GPU_RUNTIME_ZIP),
-        "sizeBytes": GPU_RUNTIME_ZIP.stat().st_size,
-    }
+    for old_zip in DIST_ROOT.glob("FishEye-*-gpu-runtime-win*.zip"):
+        old_zip.unlink()
+
+    moved_files = [GPU_RUNTIME_STAGE_DIR / name for name in sorted(to_move)]
+    parts = bin_pack(moved_files, BIN_PACK_TARGET_BYTES)
+
+    manifest_parts = []
+    for i, part_files in enumerate(parts, start=1):
+        part_zip = DIST_ROOT / f"FishEye-{version}-gpu-runtime-win.part{i}-of-{len(parts)}.zip"
+        with zipfile.ZipFile(part_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in sorted(part_files):
+                zf.write(f, arcname=f.name)
+
+        size = part_zip.stat().st_size
+        if size > GITHUB_ASSET_LIMIT_BYTES:
+            sys.exit(
+                f"{part_zip} is {size / 1e9:.2f}GB, over GitHub's 2GB release "
+                "asset limit even after splitting - lower BIN_PACK_TARGET_BYTES "
+                "and rerun."
+            )
+        manifest_parts.append({
+            "filename": part_zip.name,
+            "sha256": sha256_of(part_zip),
+            "sizeBytes": size,
+        })
+        print(f"Wrote {part_zip} ({size / 1e9:.2f}GB)")
+
+    manifest = {"version": version, "parts": manifest_parts}
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2) + "\n")
 
     base_size = sum(f.stat().st_size for f in DIST_DIR.rglob("*") if f.is_file())
     print(f"Base install (dist/fisheye-ui-backend): {base_size / 1e9:.2f}GB")
-    print(f"Wrote {GPU_RUNTIME_ZIP} ({manifest['sizeBytes'] / 1e9:.2f}GB)")
     print(f"Wrote {MANIFEST_PATH}")
 
 

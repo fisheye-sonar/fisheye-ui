@@ -10,7 +10,9 @@ const { GITHUB_REPO } = require('./updateCheck')
 // (electron-builder's bundled makensis can't compress a payload over ~2GB)
 // and fetched into place here on first launch instead. See
 // packaging/pyinstaller/split_gpu_runtime.py, which produces the manifest
-// and archive this module consumes.
+// and archives this module consumes. The runtime is split into multiple
+// zip parts because GitHub itself rejects release assets over 2GB - the
+// whole thing zipped as one file is already ~2.3GB.
 
 function backendDir() {
   return path.join(process.resourcesPath, 'backend')
@@ -91,13 +93,18 @@ function verifySha256(filePath, expectedHex, onProgress) {
   })
 }
 
-async function installFromZip(zipPath, manifest, onProgress) {
-  const ok = await verifySha256(zipPath, manifest.sha256, onProgress)
-  if (!ok) throw new Error('Downloaded file failed checksum verification')
+// Verifies and extracts a single part's zip into torchLibDir(). Does NOT
+// write the marker file - that only happens once every part has succeeded,
+// see runDownloadSetup/runFileSetup below.
+async function installPart(zipPath, part, onProgress) {
+  const ok = await verifySha256(zipPath, part.sha256, onProgress)
+  if (!ok) throw new Error(`${part.filename} failed checksum verification`)
 
   onProgress({ phase: 'extracting' })
   await extract(zipPath, { dir: torchLibDir() })
+}
 
+function markInstalled() {
   fs.writeFileSync(
     markerPath(),
     JSON.stringify({ version: app.getVersion(), installedAt: new Date().toISOString() })
@@ -106,20 +113,48 @@ async function installFromZip(zipPath, manifest, onProgress) {
 
 async function runDownloadSetup(onProgress) {
   const manifest = loadManifest()
-  const url = `https://github.com/${GITHUB_REPO}/releases/download/v${app.getVersion()}/${manifest.filename}`
-  const tmpPath = path.join(app.getPath('temp'), manifest.filename)
+  const { parts } = manifest
 
-  try {
-    await downloadToFile(url, tmpPath, onProgress)
-    await installFromZip(tmpPath, manifest, onProgress)
-  } finally {
-    fs.rm(tmpPath, { force: true }, () => {})
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    const url = `https://github.com/${GITHUB_REPO}/releases/download/v${app.getVersion()}/${part.filename}`
+    const tmpPath = path.join(app.getPath('temp'), part.filename)
+    const partProgress = p => onProgress({ ...p, partIndex: i + 1, totalParts: parts.length })
+
+    try {
+      await downloadToFile(url, tmpPath, partProgress)
+      await installPart(tmpPath, part, partProgress)
+    } finally {
+      fs.rm(tmpPath, { force: true }, () => {})
+    }
   }
+
+  markInstalled()
 }
 
-async function runFileSetup(filePath, onProgress) {
+// filePaths: array of local paths the user picked (order doesn't matter -
+// each is matched back to its manifest part by filename), one per part.
+async function runFileSetup(filePaths, onProgress) {
   const manifest = loadManifest()
-  await installFromZip(filePath, manifest, onProgress)
+  const { parts } = manifest
+
+  const byFilename = new Map(filePaths.map(p => [path.basename(p), p]))
+  const missing = parts.filter(part => !byFilename.has(part.filename))
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing file(s): ${missing.map(p => p.filename).join(', ')}. ` +
+        `Select all ${parts.length} gpu-runtime part files together.`
+    )
+  }
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    const filePath = byFilename.get(part.filename)
+    const partProgress = p => onProgress({ ...p, partIndex: i + 1, totalParts: parts.length })
+    await installPart(filePath, part, partProgress)
+  }
+
+  markInstalled()
 }
 
 module.exports = { isGpuRuntimeInstalled, runDownloadSetup, runFileSetup }

@@ -30,8 +30,10 @@ contextBridge.exposeInMainWorld('fisheyeElectron', {
   // onGpuSetupError rather than a rejected promise, since the setup itself
   // runs to completion (success or failure) inside the ipcMain.handle.
   startGpuSetupDownload: () => ipcRenderer.invoke('gpu-setup-download'),
-  startGpuSetupFromFile: filePath => ipcRenderer.invoke('gpu-setup-from-file', filePath),
-  pickGpuRuntimeFile: () => ipcRenderer.invoke('pick-gpu-runtime-file'),
+  // The runtime ships as multiple zip parts (GitHub rejects release assets
+  // over 2GB), so this takes/returns an array of paths, not a single one.
+  startGpuSetupFromFiles: filePaths => ipcRenderer.invoke('gpu-setup-from-files', filePaths),
+  pickGpuRuntimeFiles: () => ipcRenderer.invoke('pick-gpu-runtime-files'),
   onGpuSetupProgress: callback => {
     ipcRenderer.on('gpu-setup-progress', (_event, payload) => callback(payload))
   },

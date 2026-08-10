@@ -62,6 +62,9 @@
           ]
         }
       ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-win-setup.${ext}"
     }
   }
 }

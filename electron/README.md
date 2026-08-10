@@ -66,10 +66,12 @@ which alone is ~4.4GB — well over the ~2GB payload limit of the NSIS
 compiler electron-builder bundles (`makensis`; it fails with `Internal
 compiler error #12345: error mmapping file ... is out of range` on
 anything bigger). `split_gpu_runtime.py` pulls the CUDA/cuDNN libraries out
-into a separate archive before electron-builder ever runs, so the installer
-itself stays small; `gpuSetup.js` downloads that archive (or loads it from
-a local file, for machines with no internet access) the first time the
-packaged app launches.
+into separate zip parts before electron-builder ever runs, so the installer
+itself stays small; `gpuSetup.js` downloads those archives (or loads them
+from local files, for machines with no internet access) the first time the
+packaged app launches. It's multiple parts, not one, because GitHub itself
+rejects release assets over 2GB and the whole runtime zipped together is
+~2.3GB.
 
 ```bash
 cd frontend && npm run build && cd ..
@@ -85,13 +87,14 @@ npm run build:win
 ```
 
 Output:
-- `release/FishEye Setup <version>.exe` — the installer, now under ~1GB.
-- `packaging/pyinstaller/dist/fisheye-ui-gpu-runtime-win.zip` — the CUDA
-  runtime, ~2.7GB, produced by the split step above.
+- `release/FishEye-<version>-win-setup.exe` — the installer, under ~1GB.
+- `packaging/pyinstaller/dist/FishEye-<version>-gpu-runtime-win.part1-of-N.zip`
+  (however many parts `split_gpu_runtime.py` printed) — the CUDA runtime,
+  ~2.3GB combined, produced by the split step above.
 
-**Both files need to be uploaded as assets on the GitHub release** (the
-installer downloads the second one by exact filename match against the
+**All of these files need to be uploaded as assets on the GitHub release**
+(the installer downloads each part by exact filename match against the
 release tag — see `gpuSetup.js`). Re-run `split_gpu_runtime.py` for every
 release that touches the PyInstaller build, even if torch's version hasn't
-changed, so the embedded checksum always matches what's attached to that
+changed, so the embedded checksums always match what's attached to that
 tag.

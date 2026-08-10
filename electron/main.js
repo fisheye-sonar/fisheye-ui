@@ -42,14 +42,17 @@ ipcMain.handle('pick-directory', async () => {
 let gpuSetupWindow = null
 let resolveGpuSetup = null
 
-ipcMain.handle('pick-gpu-runtime-file', async () => {
+ipcMain.handle('pick-gpu-runtime-files', async () => {
+  // The runtime ships as multiple zip parts (GitHub rejects release assets
+  // over 2GB - see split_gpu_runtime.py), so this needs all of them
+  // selected together, not just one file.
   const result = await dialog.showOpenDialog(gpuSetupWindow, {
-    title: 'Select the FishEye GPU runtime file',
-    properties: ['openFile'],
+    title: 'Select all FishEye GPU runtime part files',
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'GPU runtime archive', extensions: ['zip'] }],
   })
   if (result.canceled || result.filePaths.length === 0) return null
-  return result.filePaths[0]
+  return result.filePaths
 })
 
 async function runGpuSetupAction(action, ...args) {
@@ -67,7 +70,7 @@ async function runGpuSetupAction(action, ...args) {
 }
 
 ipcMain.handle('gpu-setup-download', () => runGpuSetupAction(runDownloadSetup))
-ipcMain.handle('gpu-setup-from-file', (_event, filePath) => runGpuSetupAction(runFileSetup, filePath))
+ipcMain.handle('gpu-setup-from-files', (_event, filePaths) => runGpuSetupAction(runFileSetup, filePaths))
 
 // Opens the setup window and resolves once runGpuSetupAction reports
 // success. Closing the window before that (user quits mid-setup) rejects
@@ -100,6 +103,12 @@ app.setName('FishEye')
 
 let backendProcess = null
 let win = null
+// Guards window-all-closed below: closing the GPU setup window (the only
+// window open at that point) would otherwise fire window-all-closed and
+// quit the app before createWindow() ever gets to open the real one - a
+// real race, not just a hypothetical one, since app.quit()'s shutdown can
+// get ahead of the still-pending createWindow() call.
+let mainWindowOpened = false
 
 function getFreePort() {
   return new Promise((resolve, reject) => {
@@ -177,12 +186,37 @@ async function startBackend() {
   })
   backendProcess.stdout.on('data', chunk => process.stdout.write(chunk))
   backendProcess.stderr.on('data', chunk => process.stderr.write(chunk))
-  // torch's import time can be slow, and - especially right after GPU
-  // runtime setup - the first launch to actually touch ~2.3GB of freshly
-  // extracted, unfamiliar DLLs can get held up by Windows Defender scanning
-  // them, hence the generous waitForHealth timeout above rather than a
-  // fixed startup delay.
-  await waitForHealth(port)
+
+  // Without a listener, an unhandled 'error' event on a ChildProcess
+  // crashes the entire Electron process instantly - no dialog, no trace,
+  // it just vanishes (e.g. a just-downloaded .exe carrying Windows'
+  // "Mark of the Web" getting blocked/delayed by Defender at the exact
+  // moment of spawn). Racing against waitForHealth surfaces that as a
+  // normal rejection the caller's try/catch can show a real dialog for,
+  // instead of silently waiting out the full health-check timeout for an
+  // error that already happened.
+  const crashed = new Promise((_, reject) => {
+    backendProcess.once('error', reject)
+    backendProcess.once('exit', (code, signal) => {
+      reject(new Error(`Backend exited before becoming healthy (code ${code}, signal ${signal})`))
+    })
+  })
+
+  try {
+    await Promise.race([waitForHealth(port), crashed])
+  } finally {
+    backendProcess.removeAllListeners('error')
+    backendProcess.removeAllListeners('exit')
+    // Keep listening for the rest of the process's life so a later crash
+    // (mid-use, not just at startup) logs instead of taking the whole
+    // Electron app down with it the same way.
+    backendProcess.on('error', err => console.error('Backend process error:', err))
+    backendProcess.on('exit', (code, signal) => {
+      if (code !== 0 && code !== null) {
+        console.error(`Backend exited unexpectedly (code ${code}, signal ${signal})`)
+      }
+    })
+  }
   return port
 }
 
@@ -202,6 +236,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
     },
   })
+  mainWindowOpened = true
   win.loadURL(`http://127.0.0.1:${port}`)
   // Wait for the page (and its update-available IPC listener) to be ready
   // before sending, otherwise the event fires into nothing.
@@ -245,6 +280,19 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  // Guard against the GPU setup window (main.js's only open window at that
+  // point) closing itself and firing this before createWindow() ever gets
+  // to open the real one - see mainWindowOpened's declaration above. This
+  // fires *asynchronously*, after native window teardown completes, by
+  // which point createWindow() has typically already raced ahead and
+  // called startBackend() - so stopBackend() here isn't just a premature
+  // quit, it actively kills the backend startBackend() just spawned out
+  // from under it. Setup failing/being aborted before mainWindowOpened
+  // quits explicitly via its own try/catch in app.whenReady() instead,
+  // which independently triggers stopBackend() through the 'before-quit'
+  // handler below - so nothing legitimate is skipped by returning here.
+  if (!mainWindowOpened) return
+
   stopBackend()
   if (process.platform !== 'darwin') app.quit()
 })
