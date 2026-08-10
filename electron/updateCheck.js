@@ -119,4 +119,4 @@ async function checkForUpdate(win) {
   })
 }
 
-module.exports = { checkForUpdate }
+module.exports = { checkForUpdate, GITHUB_REPO }

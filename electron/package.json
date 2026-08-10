@@ -13,6 +13,7 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
+    "extract-zip": "^2.0.1",
     "tree-kill": "^1.2.2"
   },
   "allowScripts": {
@@ -22,6 +23,7 @@
   "build": {
     "appId": "com.fisheyesonar.fisheye-ui",
     "productName": "FishEye",
+    "compression": "normal",
     "directories": {
       "output": "release"
     },
@@ -29,7 +31,12 @@
       "main.js",
       "preload.js",
       "updateCheck.js",
-      "package.json"
+      "gpuSetup.js",
+      "setup.html",
+      "setup.js",
+      "resources/gpu-runtime.manifest.json",
+      "package.json",
+      "node_modules/**/*"
     ],
     "extraResources": [
       {
@@ -39,7 +46,10 @@
     ],
     "mac": {
       "icon": "build-resources/icon.icns",
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.utilities"
     },
     "win": {
@@ -47,9 +57,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-${version}-win-setup.${ext}"
     }
   }
 }
