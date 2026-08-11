@@ -1,12 +1,46 @@
 const { app } = require('electron')
 const https = require('https')
+const fs = require('fs')
+const path = require('path')
 
 const GITHUB_REPO = 'fisheye-sonar/fisheye-ui'
 
-function githubGet(path) {
+// GitHub's unauthenticated REST API allows 60 requests/hour per source IP,
+// shared across every unauthenticated caller on that IP - a single user's
+// app launches won't get near that, but several FishEye installs behind the
+// same office/lab NAT share the quota and could exhaust it between them.
+// Persisting the last-attempted time (success or failure) across launches
+// keeps this to one real check per window instead of one per launch.
+const CHECK_INTERVAL_MS = 60 * 60 * 1000 // 1 hour
+
+function lastCheckedPath() {
+  return path.join(app.getPath('userData'), 'update-check.json')
+}
+
+function checkedRecently() {
+  try {
+    const { checkedAt } = JSON.parse(fs.readFileSync(lastCheckedPath(), 'utf8'))
+    return Date.now() - checkedAt < CHECK_INTERVAL_MS
+  } catch {
+    return false
+  }
+}
+
+// Recorded before the request fires (not after a successful response) so a
+// failed/rate-limited attempt still throttles the next launch instead of
+// retrying every time the app opens.
+function recordCheckAttempt() {
+  try {
+    fs.writeFileSync(lastCheckedPath(), JSON.stringify({ checkedAt: Date.now() }))
+  } catch (err) {
+    console.error('Failed to record update check timestamp:', err)
+  }
+}
+
+function githubGet(urlPath) {
   return new Promise((resolve, reject) => {
     const req = https.get(
-      `https://api.github.com${path}`,
+      `https://api.github.com${urlPath}`,
       { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'FishEye' } },
       res => {
         let body = ''
@@ -102,6 +136,9 @@ function pickDownloadUrl(release) {
 // UpdateBanner.jsx) rather than showing a native OS dialog, so the update
 // notice looks like part of the app instead of a system popup.
 async function checkForUpdate(win) {
+  if (checkedRecently()) return
+  recordCheckAttempt()
+
   let release
   try {
     release = await fetchLatestRelease()
