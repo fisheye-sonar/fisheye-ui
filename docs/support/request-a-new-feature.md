@@ -2,7 +2,8 @@
 
 Have an idea that would make FishEye more useful?
 
-Open a feature request on GitHub and tell us:
+[Open a feature request](https://github.com/fisheye-sonar/fisheye-ui/issues/new?template=request_feature.yaml)
+on GitHub and tell us:
 
 - What you'd like FishEye to do
 - Why the feature would be useful
