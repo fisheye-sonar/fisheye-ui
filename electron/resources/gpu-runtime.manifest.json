@@ -3,12 +3,12 @@
   "parts": [
     {
       "filename": "FishEye-1.0.0-beta.2-gpu-runtime-win.part1-of-2.zip",
-      "sha256": "58ada4fb5b6fa4c95896904e4baca63101908cdedb0effd8d4f0b992b3bb0b0d",
+      "sha256": "89ca6d614a9f09c4eb2261b7469e7986bc7d5363b9cfb27a21fbef284f6b9deb",
       "sizeBytes": 1144986692
     },
     {
       "filename": "FishEye-1.0.0-beta.2-gpu-runtime-win.part2-of-2.zip",
-      "sha256": "71f8a89b19961c832a6337152b788714d746aa12729c5781e2beb32bcc372791",
+      "sha256": "4a77a59b751c638ec75fe0cc3fbd8b11d1ec89fac45945ca3813a673d7e20ff5",
       "sizeBytes": 1185665265
     }
   ]
