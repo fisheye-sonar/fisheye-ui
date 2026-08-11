@@ -19,10 +19,10 @@ const EXPORT_OPTIONS = [
 // (and cached locally after), keyed by filename — see fisheye's
 // common/weights.py. This is a static list for now rather instead of querying the
 // releases API live, so it stays in sync with this repo's supported models
-// only as far as we remember to update it
 const MODEL_CATALOG = [
-    { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s) — Recommended' },
-    { value: 'cfc_detect_yolov5s_v0.pt', label: 'Detector v0 (YOLOv5s)' },
+    { value: 'cfc_detect_yolov5m_v0.pt', label: 'YOLOv5m v0 — Recommended' },
+    { value: 'cfc_detect_yolov5s_v1.pt', label: 'YOLOv5s - v1' },
+    { value: 'cfc_detect_yolov5s_v0.pt', label: 'YOLOv5s - v0' },
 ]
 
 export default function SubmitForm({ onJobCreated }) {
