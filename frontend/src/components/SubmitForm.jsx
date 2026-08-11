@@ -595,7 +595,8 @@ export default function SubmitForm({ onJobCreated }) {
                     <select
                       value={platformConfig.max_workers}
                       onChange={e => setPlatformField('max_workers', parseInt(e.target.value))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={!platformConfig.use_multithreading}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                     >
                       {MAX_WORKERS_OPTIONS.map(n => (
                         <option key={n} value={n}>{n}</option>
