@@ -7,6 +7,7 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from fisheye_ui.enums import JobStatus
+from fisheye_ui.job_manager import job_manager
 
 
 def _wait_for_terminal_status(client, job_id, timeout=5):
@@ -165,6 +166,14 @@ class TestGetActive:
         make_job(id="job-123", status=JobStatus.RUNNING)
         res = client.get("/jobs/active", params={"exclude_job_id": "job-123"})
         assert res.json()["active"] is False
+
+    def test_upload_in_progress_reports_active_with_no_jobs(self, client):
+        job_manager.upload_started()
+        try:
+            res = client.get("/jobs/active")
+            assert res.json()["active"] is True
+        finally:
+            job_manager.upload_finished()
 
 
 class TestListOutputs:
