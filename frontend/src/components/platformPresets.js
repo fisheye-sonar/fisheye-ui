@@ -16,7 +16,7 @@ export const PLATFORM_PRESETS = {
   cuda_windows: {
     dataset: { batch_size: 32, workers: 0, use_multithreading: true, max_workers: 8, use_blur: true },
     model: { type: 'yolov5', device: 'cuda:0' },
-    inference: { use_multithreading: false, max_workers: 8, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
+    inference: { use_multithreading: true, max_workers: 8, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
   },
   cpu: {
     dataset: { batch_size: 1, workers: 0, use_multithreading: false, max_workers: 1, use_blur: true },

@@ -183,6 +183,16 @@ export default function SubmitForm({ onJobCreated }) {
     const platform = {
       ...preset,
       dataset: platformConfig,
+      // The advanced panel's "Use multithreading"/"Max parallel workers"
+      // controls only edit platformConfig (dataset's copy) - inference has
+      // its own separate use_multithreading/max_workers (see
+      // fisheye/pipelines/detection.py) that'd otherwise stay frozen at
+      // whatever the preset baked in, so mirror the same values there too.
+      inference: {
+        ...preset.inference,
+        use_multithreading: platformConfig.use_multithreading,
+        max_workers: platformConfig.max_workers,
+      },
       model: { ...preset.model, weights: customWeightsPath.trim() || modelWeights },
     }
 
