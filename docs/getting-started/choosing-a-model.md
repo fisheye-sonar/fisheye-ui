@@ -27,8 +27,7 @@ and compare.
 
 ## Do I need to download anything first?
 
-No. The first time you use a given model, FishEye downloads it
-automatically in the background. You'll need an internet
+FishEye downloads the chosen automatically in the background. You'll need an internet
 connection for that one-time download. After that, the model is stored
 on your computer and ready to use instantly, even offline.
 
