@@ -6,6 +6,8 @@ from typing import List, Tuple
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from fisheye_ui import __version__
+
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 
@@ -17,6 +19,7 @@ class PlatformResponse(BaseModel):
     native_file_picker: bool
     available_devices: List[str]
     temporary_gpu_hosting: bool
+    app_version: str
 
 
 def _native_file_picker_available() -> bool:
@@ -94,5 +97,6 @@ async def get_platform():
         # deploy/gpu-worker/fisheye-ui.service) - not implied by being a
         # remote/headless worker in general, since a user's own BYO-cloud
         # worker will be remote and headless too but shouldn't show this.
-        temporary_gpu_hosting=True,  # bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
+        temporary_gpu_hosting=bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
+        app_version=__version__,
     )

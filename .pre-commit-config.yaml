@@ -8,3 +8,9 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+      - id: check-versions
+        name: check app version is in sync across files
+        entry: poetry run python scripts/check_versions.py
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|electron/package\.json|fisheye_ui/__init__\.py)$

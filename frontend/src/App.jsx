@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import SubmitForm from './components/SubmitForm'
 import ProgressView from './components/ProgressView'
 
@@ -11,6 +11,20 @@ export default function App() {
     const params = new URLSearchParams(window.location.search)
     return params.get('job') || null
   })
+  const [appVersion, setAppVersion] = useState(null)
+
+  // Fetched once here (rather than threaded through SubmitForm/ProgressView)
+  // so the version tag renders the same way regardless of which view is active.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/platform')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!cancelled && typeof data?.app_version === 'string') setAppVersion(data.app_version)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   function handleJobCreated(id) {
     setJobId(id)
@@ -23,7 +37,16 @@ export default function App() {
     window.history.pushState({}, '', window.location.pathname)
   }
 
-  if (view === 'form') return <SubmitForm onJobCreated={handleJobCreated} />
-
-  return <ProgressView jobId={jobId} onBack={handleBack} />
+  return (
+    <>
+      {view === 'form'
+        ? <SubmitForm onJobCreated={handleJobCreated} />
+        : <ProgressView jobId={jobId} onBack={handleBack} />}
+      {appVersion && (
+        <span className="fixed bottom-2 right-3 text-xs text-gray-400 select-none">
+          v{appVersion}
+        </span>
+      )}
+    </>
+  )
 }
