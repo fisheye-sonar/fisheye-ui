@@ -1,32 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import UpdateBanner from './UpdateBanner'
-
-const PLATFORM_PRESETS = {
-  mps: {
-    dataset: { batch_size: 16, workers: 0, use_multithreading: true, max_workers: 2, use_blur: true },
-    model: { type: 'yolov5', device: 'mps' },
-    inference: { use_multithreading: true, max_workers: 2, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-  cuda: {
-    dataset: { batch_size: 32, workers: 10, use_multithreading: false, max_workers: 4, use_blur: true },
-    model: { type: 'yolov5', device: 'cuda:0' },
-    inference: { use_multithreading: false, max_workers: 4, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-  cpu: {
-    dataset: { batch_size: 1, workers: 0, use_multithreading: false, max_workers: 1, use_blur: true },
-    model: { type: 'yolov5', device: 'cpu' },
-    inference: { use_multithreading: false, max_workers: 1, apply_nms_batchwise: true, apply_length_estimates_batchwise: false, length_config: { type: 'unet', weights: null } },
-  },
-}
+import { BATCH_SIZE_OPTIONS, MAX_WORKERS_OPTIONS, PLATFORM_PRESETS, WORKERS_OPTIONS, presetKeyFor } from './platformPresets'
 
 // Electron always exposes a working native picker (dialog.showOpenDialog is
 // the same API on every OS), so it takes priority over the backend's
 // native_file_picker flag - which is false on Windows, where the backend
 // has no AppleScript/zenity equivalent (see fisheye_ui/routes/platform.py).
 const hasElectronPicker = typeof window !== 'undefined' && typeof window.fisheyeElectron?.pickFile === 'function'
-
-const BATCH_SIZE_OPTIONS = [1, 2, 4, 8, 16, 32, 64, 128]
-const MAX_WORKERS_OPTIONS = [1, 2, 4, 8, 16]
 
 const EXPORT_OPTIONS = [
   { value: 'summary_csv', label: 'Summary CSV' },
@@ -39,10 +19,10 @@ const EXPORT_OPTIONS = [
 // (and cached locally after), keyed by filename — see fisheye's
 // common/weights.py. This is a static list for now rather instead of querying the
 // releases API live, so it stays in sync with this repo's supported models
-// only as far as we remember to update it
 const MODEL_CATALOG = [
-    { value: 'cfc_detect_yolov5s_v1.pt', label: 'Detector v1 (YOLOv5s) — Recommended' },
-    { value: 'cfc_detect_yolov5s_v0.pt', label: 'Detector v0 (YOLOv5s)' },
+    { value: 'cfc_detect_yolov5m_v0.pt', label: 'YOLOv5m v0 — Recommended' },
+    { value: 'cfc_detect_yolov5s_v1.pt', label: 'YOLOv5s - v1' },
+    { value: 'cfc_detect_yolov5s_v0.pt', label: 'YOLOv5s - v0' },
 ]
 
 export default function SubmitForm({ onJobCreated }) {
@@ -55,6 +35,10 @@ export default function SubmitForm({ onJobCreated }) {
   const [modelWeights, setModelWeights] = useState(MODEL_CATALOG[0].value)
   const [customWeightsPath, setCustomWeightsPath] = useState('')
   const [device, setDevice] = useState('mps')
+  // What /platform reported as sys.platform, normalized to
+  // 'windows' | 'darwin' | 'linux' | 'other'. Only used to disambiguate the
+  // cuda preset (see presetKeyFor) - not shown in the UI.
+  const [detectedOs, setDetectedOs] = useState(null)
   const [platformConfig, setPlatformConfig] = useState(PLATFORM_PRESETS.mps.dataset)
   // Defaults to true so desktop's UI doesn't flash to the upload variant
   // before this resolves; a remote worker flips it to false once /platform responds.
@@ -69,11 +53,12 @@ export default function SubmitForm({ onJobCreated }) {
   const [recommendedDevice, setRecommendedDevice] = useState(null)
   const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef(null)
 
-  function handleDeviceChange(newDevice) {
+  function handleDeviceChange(newDevice, os) {
     setDevice(newDevice)
-    setPlatformConfig(PLATFORM_PRESETS[newDevice].dataset)
+    setPlatformConfig(PLATFORM_PRESETS[presetKeyFor(newDevice, os)].dataset)
   }
 
   function setPlatformField(field, value) {
@@ -88,8 +73,9 @@ export default function SubmitForm({ onJobCreated }) {
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (cancelled || !data) return
+        if (typeof data.os === 'string') setDetectedOs(data.os)
         if (data.device) {
-          handleDeviceChange(data.device)
+          handleDeviceChange(data.device, data.os)
           setRecommendedDevice(data.device)
         }
         if (typeof data.native_file_picker === 'boolean') setNativeFilePicker(hasElectronPicker || data.native_file_picker)
@@ -98,25 +84,6 @@ export default function SubmitForm({ onJobCreated }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
-
-  const [gpuBusy, setGpuBusy] = useState(false)
-
-  // Jobs share whatever GPU is on this machine - there's no queue, so a job
-  // submitted while another is running competes for the same device instead
-  // of waiting its turn. Poll while this form is up so the warning appears
-  // even if the other job started after the page loaded.
-  useEffect(() => {
-    let cancelled = false
-    const checkActive = () => {
-      fetch('/jobs/active')
-        .then(res => (res.ok ? res.json() : null))
-        .then(data => { if (!cancelled && data) setGpuBusy(data.active) })
-        .catch(() => {})
-    }
-    checkActive()
-    const interval = setInterval(checkActive, 5000)
-    return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
   const [upstreamDirection, setUpstreamDirection] = useState('left')
@@ -158,27 +125,38 @@ export default function SubmitForm({ onJobCreated }) {
 
   // Counterpart to browsePath for deployments with no server-side file
   // picker (e.g. a remote GPU worker) - uploads the file's bytes instead
-  // of asking the server to resolve a local path.
+  // of asking the server to resolve a local path. Uses XMLHttpRequest
+  // instead of fetch because it's the only browser API that reports
+  // upload progress (fetch has no equivalent for outgoing request bodies).
   async function uploadFile(file) {
     setUploading(true)
+    setUploadProgress(0)
     setError(null)
     try {
-      const res = await fetch(`/files/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        body: file,
+      const path = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `/files/upload?filename=${encodeURIComponent(file.name)}`)
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => {
+          let data = {}
+          try { data = JSON.parse(xhr.responseText) } catch { /* non-JSON error body */ }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data.path)
+          } else {
+            reject(new Error(data.detail ?? 'Upload failed'))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Upload failed'))
+        xhr.send(file)
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.detail ?? 'Upload failed')
-        return
-      }
-      const { path } = await res.json()
       if (path) {
         setInputPath(path)
         setInputLabel(file.name)
       }
-    } catch {
-      setError('Upload failed')
+    } catch (err) {
+      setError(err.message ?? 'Upload failed')
     } finally {
       setUploading(false)
     }
@@ -194,10 +172,21 @@ export default function SubmitForm({ onJobCreated }) {
     setError(null)
     setSubmitting(true)
 
+    const preset = PLATFORM_PRESETS[presetKeyFor(device, detectedOs)]
     const platform = {
-      ...PLATFORM_PRESETS[device],
+      ...preset,
       dataset: platformConfig,
-      model: { ...PLATFORM_PRESETS[device].model, weights: customWeightsPath.trim() || modelWeights },
+      // The advanced panel's "Use multithreading"/"Max parallel workers"
+      // controls only edit platformConfig (dataset's copy) - inference has
+      // its own separate use_multithreading/max_workers (see
+      // fisheye/pipelines/detection.py) that'd otherwise stay frozen at
+      // whatever the preset baked in, so mirror the same values there too.
+      inference: {
+        ...preset.inference,
+        use_multithreading: platformConfig.use_multithreading,
+        max_workers: platformConfig.max_workers,
+      },
+      model: { ...preset.model, weights: customWeightsPath.trim() || modelWeights },
     }
 
     const body = {
@@ -371,11 +360,19 @@ export default function SubmitForm({ onJobCreated }) {
                           disabled={uploading}
                           className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
                         >
-                          {uploading ? 'Uploading…' : 'Upload file'}
+                          {uploading ? `Uploading… ${uploadProgress}%` : 'Upload file'}
                         </button>
                       </>
                     )}
                   </div>
+                  {uploading && (
+                    <div className="w-48 mx-auto mt-3 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -440,7 +437,7 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
               <select
                 value={device}
-                onChange={e => handleDeviceChange(e.target.value)}
+                onChange={e => handleDeviceChange(e.target.value, detectedOs)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="mps" disabled={!availableDevices.includes('mps')}>
@@ -609,9 +606,35 @@ export default function SubmitForm({ onJobCreated }) {
                     <select
                       value={platformConfig.max_workers}
                       onChange={e => setPlatformField('max_workers', parseInt(e.target.value))}
-                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      disabled={!platformConfig.use_multithreading}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
                     >
                       {MAX_WORKERS_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <label className="block text-sm font-medium text-gray-700">Dataloader workers</label>
+                      <div className="relative group">
+                        <svg className="w-4 h-4 text-amber-600 hover:text-amber-700 transition-colors cursor-help" viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" fill="currentColor" />
+                          <path stroke="white" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" d="M9.09 9a3 3 0 015.83 1c0 2-3 2.5-3 4" />
+                          <path stroke="white" strokeWidth={1.5} strokeLinecap="round" d="M12 17h.01" />
+                        </svg>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 hidden group-hover:block z-10 pointer-events-none">
+                          Background processes that load data in parallel. Higher can speed things up on Linux, but on Windows this should usually stay 0 - each one is expensive to start there regardless of CPU count.
+                          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                        </div>
+                      </div>
+                    </div>
+                    <select
+                      value={platformConfig.workers}
+                      onChange={e => setPlatformField('workers', parseInt(e.target.value))}
+                      className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {WORKERS_OPTIONS.map(n => (
                         <option key={n} value={n}>{n}</option>
                       ))}
                     </select>
@@ -631,12 +654,6 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
             </div>
           </details>
-
-          {gpuBusy && (
-            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
-            </p>
-          )}
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>

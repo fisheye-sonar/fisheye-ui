@@ -58,3 +58,43 @@ Currently unsigned: macOS Gatekeeper will show an "unidentified developer" or a 
 warning on first launch (right-click → Open bypasses it). Code
 signing/notarization is a later step (needs a paid Apple Developer
 certificate). If that doesn't work, open the terminal and run: `xattr -cr /path/to/FishEye.app `
+
+## Building the final app (Windows)
+
+The Windows PyInstaller build includes CUDA-enabled torch (GPU support),
+which alone is ~4.4GB — well over the ~2GB payload limit of the NSIS
+compiler electron-builder bundles (`makensis`; it fails with `Internal
+compiler error #12345: error mmapping file ... is out of range` on
+anything bigger). `split_gpu_runtime.py` pulls the CUDA/cuDNN libraries out
+into separate zip parts before electron-builder ever runs, so the installer
+itself stays small; `gpuSetup.js` downloads those archives (or loads them
+from local files, for machines with no internet access) the first time the
+packaged app launches. It's multiple parts, not one, because GitHub itself
+rejects release assets over 2GB and the whole runtime zipped together is
+~2.3GB.
+
+```bash
+cd frontend && npm run build && cd ..
+
+poetry run pyinstaller packaging/pyinstaller/fisheye_ui.spec --noconfirm \
+  --distpath packaging/pyinstaller/dist \
+  --workpath packaging/pyinstaller/build
+
+poetry run python packaging/pyinstaller/split_gpu_runtime.py
+
+cd electron
+npm run build:win
+```
+
+Output:
+- `release/FishEye-<version>-win-setup.exe` — the installer, under ~1GB.
+- `packaging/pyinstaller/dist/FishEye-<version>-gpu-runtime-win.part1-of-N.zip`
+  (however many parts `split_gpu_runtime.py` printed) — the CUDA runtime,
+  ~2.3GB combined, produced by the split step above.
+
+**All of these files need to be uploaded as assets on the GitHub release**
+(the installer downloads each part by exact filename match against the
+release tag — see `gpuSetup.js`). Re-run `split_gpu_runtime.py` for every
+release that touches the PyInstaller build, even if torch's version hasn't
+changed, so the embedded checksums always match what's attached to that
+tag.

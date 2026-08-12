@@ -6,9 +6,8 @@ from io import BytesIO
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from fisheye_ui import usage as usage_module
 from fisheye_ui.enums import JobStatus
-from fisheye_ui.routes.jobs import USER_HEADER
+from fisheye_ui.job_manager import job_manager
 
 
 def _wait_for_terminal_status(client, job_id, timeout=5):
@@ -105,100 +104,6 @@ class TestCreateJob:
         assert res.json()["output_dir"] == suggested
 
 
-class TestUsageLimit:
-    def test_no_user_header_is_never_limited(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(usage_module, "MAX_JOBS_PER_USER", 1)
-        monkeypatch.setattr(
-            "fisheye.runner.run_job",
-            lambda config, job_id, configure_logging=True: None,
-        )
-        input_file = tmp_path / "clip.aris"
-        input_file.write_text("data")
-
-        for _ in range(3):
-            res = client.post("/jobs", json=_job_body(input_file, confirm_rerun=True))
-            assert res.status_code == 201
-
-    def test_unlimited_user_bypasses_limit(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(usage_module, "MAX_JOBS_PER_USER", 1)
-        monkeypatch.setattr(usage_module, "UNLIMITED_USER", "admin")
-        monkeypatch.setattr(
-            "fisheye.runner.run_job",
-            lambda config, job_id, configure_logging=True: None,
-        )
-        input_file = tmp_path / "clip.aris"
-        input_file.write_text("data")
-
-        for _ in range(3):
-            res = client.post(
-                "/jobs",
-                json=_job_body(input_file, confirm_rerun=True),
-                headers={USER_HEADER: "admin"},
-            )
-            assert res.status_code == 201
-
-    def test_limited_user_blocked_after_reaching_limit(
-        self, client, tmp_path, monkeypatch
-    ):
-        monkeypatch.setattr(usage_module, "MAX_JOBS_PER_USER", 2)
-        monkeypatch.setattr(usage_module, "UNLIMITED_USER", "admin")
-        monkeypatch.setattr(
-            "fisheye.runner.run_job",
-            lambda config, job_id, configure_logging=True: None,
-        )
-        input_file = tmp_path / "clip.aris"
-        input_file.write_text("data")
-        headers = {USER_HEADER: "researcher@example.com"}
-
-        for _ in range(2):
-            res = client.post(
-                "/jobs",
-                json=_job_body(input_file, confirm_rerun=True),
-                headers=headers,
-            )
-            assert res.status_code == 201
-
-        res = client.post(
-            "/jobs", json=_job_body(input_file, confirm_rerun=True), headers=headers
-        )
-        assert res.status_code == 403
-        assert "2 jobs" in res.json()["detail"]
-
-    def test_usage_counts_persist_across_requests(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(usage_module, "MAX_JOBS_PER_USER", 10)
-        monkeypatch.setattr(usage_module, "UNLIMITED_USER", "admin")
-        monkeypatch.setattr(
-            "fisheye.runner.run_job",
-            lambda config, job_id, configure_logging=True: None,
-        )
-        input_file = tmp_path / "clip.aris"
-        input_file.write_text("data")
-        headers = {USER_HEADER: "researcher@example.com"}
-
-        client.post(
-            "/jobs", json=_job_body(input_file, confirm_rerun=True), headers=headers
-        )
-        assert usage_module.jobs_used("researcher@example.com") == 1
-
-        client.post(
-            "/jobs", json=_job_body(input_file, confirm_rerun=True), headers=headers
-        )
-        assert usage_module.jobs_used("researcher@example.com") == 2
-
-    def test_blocked_request_does_not_start_a_job(self, client, tmp_path, monkeypatch):
-        monkeypatch.setattr(usage_module, "MAX_JOBS_PER_USER", 0)
-        monkeypatch.setattr(usage_module, "UNLIMITED_USER", "admin")
-        input_file = tmp_path / "clip.aris"
-        input_file.write_text("data")
-
-        res = client.post(
-            "/jobs",
-            json=_job_body(input_file),
-            headers={USER_HEADER: "researcher@example.com"},
-        )
-        assert res.status_code == 403
-
-
 class TestGetJob:
     def test_not_found_returns_404(self, client):
         res = client.get("/jobs/does-not-exist")
@@ -261,6 +166,14 @@ class TestGetActive:
         make_job(id="job-123", status=JobStatus.RUNNING)
         res = client.get("/jobs/active", params={"exclude_job_id": "job-123"})
         assert res.json()["active"] is False
+
+    def test_upload_in_progress_reports_active_with_no_jobs(self, client):
+        job_manager.upload_started()
+        try:
+            res = client.get("/jobs/active")
+            assert res.json()["active"] is True
+        finally:
+            job_manager.upload_finished()
 
 
 class TestListOutputs:

@@ -6,6 +6,8 @@ from typing import List, Tuple
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from fisheye_ui import __version__
+
 router = APIRouter(prefix="/platform", tags=["platform"])
 
 
@@ -13,9 +15,11 @@ class PlatformResponse(BaseModel):
     """Recommended platform response schema."""
 
     device: str
+    os: str
     native_file_picker: bool
     available_devices: List[str]
     temporary_gpu_hosting: bool
+    app_version: str
 
 
 def _native_file_picker_available() -> bool:
@@ -33,6 +37,24 @@ def _native_file_picker_available() -> bool:
         )
         return bool(shutil.which("zenity")) and has_display
     return False
+
+
+def _os_name() -> str:
+    """Normalized OS name for picking a platform preset client-side.
+
+    Distinct from device (cuda/mps/cpu): a CUDA GPU on Windows still can't
+    fork() like a CUDA GPU on Linux can, so the frontend needs this to tell
+    those two apart. sys.platform is used here (not os.name/navigator on the
+    frontend) since it's the reliable source - user-agent sniffing in the
+    browser is not.
+    """
+    if sys.platform == "darwin":
+        return "darwin"
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return "other"
 
 
 def _device_availability() -> Tuple[str, List[str]]:
@@ -68,11 +90,13 @@ async def get_platform():
     recommended, available = _device_availability()
     return PlatformResponse(
         device=recommended,
+        os=_os_name(),
         native_file_picker=_native_file_picker_available(),
         available_devices=available,
         # Set on the one GPU box we currently pay for to run demos (see
         # deploy/gpu-worker/fisheye-ui.service) - not implied by being a
         # remote/headless worker in general, since a user's own BYO-cloud
         # worker will be remote and headless too but shouldn't show this.
-        temporary_gpu_hosting=True,  # bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
+        temporary_gpu_hosting=bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
+        app_version=__version__,
     )

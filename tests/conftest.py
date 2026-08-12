@@ -20,10 +20,15 @@ def client():
 @pytest.fixture(autouse=True)
 def clean_job_registry():
     """job_manager is a process-wide singleton — clear it around each test
-    so jobs seeded/created by one test can't leak into another."""
+    so jobs (and upload-activity tracking, see job_manager.upload_started)
+    seeded/created by one test can't leak into another."""
     job_manager._jobs.clear()
+    job_manager._active_uploads = 0
+    job_manager._last_upload_finished_at = None
     yield
     job_manager._jobs.clear()
+    job_manager._active_uploads = 0
+    job_manager._last_upload_finished_at = None
 
 
 @pytest.fixture(autouse=True)

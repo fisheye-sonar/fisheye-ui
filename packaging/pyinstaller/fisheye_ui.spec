@@ -54,7 +54,15 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=True,
+    # False (GUI subsystem) so Windows never pops up a console window when
+    # Electron spawns this as a child process - a console=True bootloader
+    # allocates its own console internally (AllocConsole()) whenever one
+    # isn't inherited, which no amount of windowsHide/stdio piping on the
+    # parent side can prevent, since that decision happens inside the
+    # child itself. stdout/stderr are still fully usable via explicit pipes
+    # (see main.js's startBackend) - this only affects whether an
+    # automatic console window gets created, not handle availability.
+    console=False,
 )
 
 coll = COLLECT(

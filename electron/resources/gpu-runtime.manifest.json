@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0-beta.2",
+  "parts": [
+    {
+      "filename": "FishEye-1.0.0-beta.2-gpu-runtime-win.part1-of-2.zip",
+      "sha256": "89ca6d614a9f09c4eb2261b7469e7986bc7d5363b9cfb27a21fbef284f6b9deb",
+      "sizeBytes": 1144986692
+    },
+    {
+      "filename": "FishEye-1.0.0-beta.2-gpu-runtime-win.part2-of-2.zip",
+      "sha256": "4a77a59b751c638ec75fe0cc3fbd8b11d1ec89fac45945ca3813a673d7e20ff5",
+      "sizeBytes": 1185665265
+    }
+  ]
+}

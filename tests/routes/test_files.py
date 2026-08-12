@@ -26,6 +26,14 @@ class TestUploadFile:
         res = client.post("/files/upload?filename=clip.ddf", content=b"data")
         assert res.status_code == 201
 
+    def test_active_uploads_is_balanced_after_completion(self, client):
+        # Guards against upload_started/upload_finished drifting out of a
+        # try/finally pairing and leaking a permanently "active" upload,
+        # which would stop the idle-watcher from ever sleeping the worker.
+        res = client.post("/files/upload?filename=clip.aris", content=b"data")
+        assert res.status_code == 201
+        assert job_manager.has_active_uploads() is False
+
 
 class TestSweepStaleUploads:
     def _make_stale(self, path):

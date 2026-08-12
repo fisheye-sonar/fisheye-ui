@@ -208,8 +208,12 @@ async def upload_file(request: Request, filename: str):
     job_upload_dir = Path(tempfile.mkdtemp(dir=UPLOAD_DIR))
     dest = job_upload_dir / Path(filename).name
 
-    with dest.open("wb") as out:
-        async for chunk in request.stream():
-            await anyio.to_thread.run_sync(out.write, chunk)
+    job_manager.upload_started()
+    try:
+        with dest.open("wb") as out:
+            async for chunk in request.stream():
+                await anyio.to_thread.run_sync(out.write, chunk)
+    finally:
+        job_manager.upload_finished()
 
     return PickedPath(path=str(dest))

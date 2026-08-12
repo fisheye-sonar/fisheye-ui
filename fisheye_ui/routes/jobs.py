@@ -75,21 +75,23 @@ async def create_job(request: JobCreateRequest, http_request: Request):
 @router.get("/active")
 async def get_active(exclude_job_id: Optional[str] = None):
     """Whether any job (other than exclude_job_id, if given) is currently
-    pending or running, and how long it's been since the most recent job
-    finished.
+    pending or running or a file is currently uploading, and how long it's
+    been since the most recent job or upload finished.
 
     Registered before /{job_id} so "active" isn't swallowed as a job_id.
     With no exclude_job_id, this is the remote-deployment idle-watcher's
-    activity signal: it never stops the GPU worker while a job is active,
-    and otherwise measures idle time from job start/finish events rather
-    than raw HTTP traffic (browsing/composing the form isn't "activity" for
-    auto-sleep purposes). The frontend also polls this - excluding the job
-    it's currently viewing - to warn the user the shared GPU is busy with
-    someone else's job. `idle_seconds` is null if no job has ever finished
-    on this worker.
+    activity signal: it never stops the GPU worker while a job or upload is
+    active, and otherwise measures idle time from job/upload start-finish
+    events rather than raw HTTP traffic (browsing/composing the form isn't
+    "activity" for auto-sleep purposes). The frontend also polls this -
+    excluding the job it's currently viewing - to warn the user the shared
+    GPU is busy with someone else's job or upload. `idle_seconds` is null if
+    no job has ever finished and no upload has ever completed on this
+    worker.
     """
     return {
-        "active": job_manager.has_active_jobs(exclude_job_id),
+        "active": job_manager.has_active_jobs(exclude_job_id)
+        or job_manager.has_active_uploads(),
         "idle_seconds": job_manager.idle_seconds(),
     }
 
