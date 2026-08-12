@@ -86,25 +86,6 @@ export default function SubmitForm({ onJobCreated }) {
     return () => { cancelled = true }
   }, [])
 
-  const [gpuBusy, setGpuBusy] = useState(false)
-
-  // Jobs share whatever GPU is on this machine - there's no queue, so a job
-  // submitted while another is running competes for the same device instead
-  // of waiting its turn. Poll while this form is up so the warning appears
-  // even if the other job started after the page loaded.
-  useEffect(() => {
-    let cancelled = false
-    const checkActive = () => {
-      fetch('/jobs/active')
-        .then(res => (res.ok ? res.json() : null))
-        .then(data => { if (!cancelled && data) setGpuBusy(data.active) })
-        .catch(() => {})
-    }
-    checkActive()
-    const interval = setInterval(checkActive, 5000)
-    return () => { cancelled = true; clearInterval(interval) }
-  }, [])
-
   const [upstreamDirection, setUpstreamDirection] = useState('left')
   const [distanceOffset, setDistanceOffset] = useState(0)
   const [exportOptions, setExportOptions] = useState(['summary_csv', 'detailed_csv', 'fc'])
@@ -673,12 +654,6 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
             </div>
           </details>
-
-          {gpuBusy && (
-            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
-            </p>
-          )}
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
