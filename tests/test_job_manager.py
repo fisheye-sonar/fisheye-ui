@@ -168,6 +168,42 @@ class TestHasActiveJobsAndIdleSeconds:
         assert idle is not None
         assert idle < 5
 
+    def test_upload_in_progress_has_no_active_jobs_but_is_tracked_separately(self):
+        manager = JobManager()
+        manager.upload_started()
+        assert manager.has_active_jobs() is False
+        assert manager.has_active_uploads() is True
+
+    def test_upload_finished_clears_active_uploads(self):
+        manager = JobManager()
+        manager.upload_started()
+        manager.upload_finished()
+        assert manager.has_active_uploads() is False
+
+    def test_second_concurrent_upload_keeps_active_uploads_true_after_first_finishes(
+        self,
+    ):
+        manager = JobManager()
+        manager.upload_started()
+        manager.upload_started()
+        manager.upload_finished()
+        assert manager.has_active_uploads() is True
+
+    def test_idle_seconds_measures_from_most_recent_upload_finish(self):
+        manager = JobManager()
+        manager._jobs["older"] = Job(
+            id="older",
+            status=JobStatus.COMPLETED,
+            created_at=datetime(2026, 1, 1),
+            config={},
+            finished_at=datetime(2026, 1, 1),
+        )
+        manager.upload_started()
+        manager.upload_finished()
+        idle = manager.idle_seconds()
+        assert idle is not None
+        assert idle < 5
+
 
 class TestActiveUploadDirs:
     def test_includes_pending_job_input_under_upload_dir(self, isolated_dirs):

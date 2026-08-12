@@ -65,7 +65,32 @@ class JobManager:
         # here before touching the GPU, so cancelling a queued job still
         # works via the existing _raise_in_thread mechanism.
         self._run_semaphore = threading.Semaphore(MAX_CONCURRENT_JOBS)
+        # Tracks uploads streaming to disk (see routes/files.py's
+        # upload_file) - no Job exists yet at that point (the job isn't
+        # created until the user submits the form after the upload
+        # finishes), so has_active_jobs() alone can't see it.
+        # _active_uploads gates the idle-watcher's "never stop" check the
+        # same way a pending/running job does; _last_upload_finished_at
+        # extends idle_seconds' existing grace period to also cover the gap
+        # between sequential uploads in a multi-file batch, not just the
+        # instant a single upload is actively streaming.
+        self._active_uploads = 0
+        self._last_upload_finished_at: Optional[datetime] = None
+        self._uploads_lock = threading.Lock()
         self._reload_from_disk()
+
+    def upload_started(self) -> None:
+        with self._uploads_lock:
+            self._active_uploads += 1
+
+    def upload_finished(self) -> None:
+        with self._uploads_lock:
+            self._active_uploads -= 1
+            self._last_upload_finished_at = datetime.utcnow()
+
+    def has_active_uploads(self) -> bool:
+        with self._uploads_lock:
+            return self._active_uploads > 0
 
     def create_job(self, config: Union[Dict, DictConfig]) -> str:
         if isinstance(config, DictConfig):
@@ -182,13 +207,22 @@ class JobManager:
 
     def idle_seconds(self) -> Optional[float]:
         """Seconds since the most recent job finished (completed/failed/
-        cancelled). None if no job has ever finished on this worker - the
-        remote-deployment idle-watcher falls back to measuring from when
-        the worker woke up in that case. This (not raw HTTP traffic) is
-        the idle-watcher's activity signal: a user composing the form or
-        just reading a completed job's results isn't "activity" for
-        auto-sleep purposes, only job start/finish is."""
+        cancelled) or upload completed, whichever is later. None if neither
+        has ever happened on this worker - the remote-deployment
+        idle-watcher falls back to measuring from when the worker woke up
+        in that case. This (not raw HTTP traffic) is the idle-watcher's
+        activity signal: a user composing the form or just reading a
+        completed job's results isn't "activity" for auto-sleep purposes,
+        only job start/finish and upload activity are. Counting upload
+        *completion* here (has_active_uploads covers the moment one is
+        actively streaming) gives the gap between sequential uploads in a
+        multi-file batch the same grace period a finished job gets, rather
+        than an instantaneous cutoff the idle-watcher's poll could land in
+        the middle of."""
         finished = [job.finished_at for job in self._jobs.values() if job.finished_at]
+        with self._uploads_lock:
+            if self._last_upload_finished_at:
+                finished.append(self._last_upload_finished_at)
         if not finished:
             return None
         return (datetime.utcnow() - max(finished)).total_seconds()
