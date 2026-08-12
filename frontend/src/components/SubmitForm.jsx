@@ -53,6 +53,7 @@ export default function SubmitForm({ onJobCreated }) {
   const [recommendedDevice, setRecommendedDevice] = useState(null)
   const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef(null)
 
   function handleDeviceChange(newDevice, os) {
@@ -83,25 +84,6 @@ export default function SubmitForm({ onJobCreated }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
-
-  const [gpuBusy, setGpuBusy] = useState(false)
-
-  // Jobs share whatever GPU is on this machine - there's no queue, so a job
-  // submitted while another is running competes for the same device instead
-  // of waiting its turn. Poll while this form is up so the warning appears
-  // even if the other job started after the page loaded.
-  useEffect(() => {
-    let cancelled = false
-    const checkActive = () => {
-      fetch('/jobs/active')
-        .then(res => (res.ok ? res.json() : null))
-        .then(data => { if (!cancelled && data) setGpuBusy(data.active) })
-        .catch(() => {})
-    }
-    checkActive()
-    const interval = setInterval(checkActive, 5000)
-    return () => { cancelled = true; clearInterval(interval) }
   }, [])
 
   const [upstreamDirection, setUpstreamDirection] = useState('left')
@@ -143,27 +125,38 @@ export default function SubmitForm({ onJobCreated }) {
 
   // Counterpart to browsePath for deployments with no server-side file
   // picker (e.g. a remote GPU worker) - uploads the file's bytes instead
-  // of asking the server to resolve a local path.
+  // of asking the server to resolve a local path. Uses XMLHttpRequest
+  // instead of fetch because it's the only browser API that reports
+  // upload progress (fetch has no equivalent for outgoing request bodies).
   async function uploadFile(file) {
     setUploading(true)
+    setUploadProgress(0)
     setError(null)
     try {
-      const res = await fetch(`/files/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        body: file,
+      const path = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `/files/upload?filename=${encodeURIComponent(file.name)}`)
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => {
+          let data = {}
+          try { data = JSON.parse(xhr.responseText) } catch { /* non-JSON error body */ }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data.path)
+          } else {
+            reject(new Error(data.detail ?? 'Upload failed'))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Upload failed'))
+        xhr.send(file)
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.detail ?? 'Upload failed')
-        return
-      }
-      const { path } = await res.json()
       if (path) {
         setInputPath(path)
         setInputLabel(file.name)
       }
-    } catch {
-      setError('Upload failed')
+    } catch (err) {
+      setError(err.message ?? 'Upload failed')
     } finally {
       setUploading(false)
     }
@@ -367,11 +360,19 @@ export default function SubmitForm({ onJobCreated }) {
                           disabled={uploading}
                           className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
                         >
-                          {uploading ? 'Uploading…' : 'Upload file'}
+                          {uploading ? `Uploading… ${uploadProgress}%` : 'Upload file'}
                         </button>
                       </>
                     )}
                   </div>
+                  {uploading && (
+                    <div className="w-48 mx-auto mt-3 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -653,12 +654,6 @@ export default function SubmitForm({ onJobCreated }) {
               </div>
             </div>
           </details>
-
-          {gpuBusy && (
-            <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
-              Another job is currently running on this machine. The GPU is shared, so processing time may increase until it finishes.
-            </p>
-          )}
 
           {error && (
             <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>

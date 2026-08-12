@@ -5,6 +5,7 @@ These three are hand-edited independently (Poetry, electron-builder, and the
 PyInstaller-frozen backend each need their own copy - see fisheye_ui/__init__.py
 for why), so nothing else catches them drifting apart.
 """
+
 import json
 import re
 import sys
