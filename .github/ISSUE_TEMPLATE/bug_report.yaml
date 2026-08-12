@@ -35,8 +35,8 @@ body:
     id: version
     attributes:
       label: FishEye Version
-      description: What version of FishEye are you running? You can find this in the app.
-      placeholder: ex. v1.0.0-beta.2
+      description: What version of FishEye are you running? You can find the version number in the bottom-right corner of the app.
+      placeholder: e.g., v1.0.0-beta.2
     validations:
       required: true
   - type: textarea
