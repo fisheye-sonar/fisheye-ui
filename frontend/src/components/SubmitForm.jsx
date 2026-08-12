@@ -53,6 +53,7 @@ export default function SubmitForm({ onJobCreated }) {
   const [recommendedDevice, setRecommendedDevice] = useState(null)
   const [temporaryGpuHosting, setTemporaryGpuHosting] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef(null)
 
   function handleDeviceChange(newDevice, os) {
@@ -143,27 +144,38 @@ export default function SubmitForm({ onJobCreated }) {
 
   // Counterpart to browsePath for deployments with no server-side file
   // picker (e.g. a remote GPU worker) - uploads the file's bytes instead
-  // of asking the server to resolve a local path.
+  // of asking the server to resolve a local path. Uses XMLHttpRequest
+  // instead of fetch because it's the only browser API that reports
+  // upload progress (fetch has no equivalent for outgoing request bodies).
   async function uploadFile(file) {
     setUploading(true)
+    setUploadProgress(0)
     setError(null)
     try {
-      const res = await fetch(`/files/upload?filename=${encodeURIComponent(file.name)}`, {
-        method: 'POST',
-        body: file,
+      const path = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', `/files/upload?filename=${encodeURIComponent(file.name)}`)
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100))
+        }
+        xhr.onload = () => {
+          let data = {}
+          try { data = JSON.parse(xhr.responseText) } catch { /* non-JSON error body */ }
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data.path)
+          } else {
+            reject(new Error(data.detail ?? 'Upload failed'))
+          }
+        }
+        xhr.onerror = () => reject(new Error('Upload failed'))
+        xhr.send(file)
       })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        setError(data.detail ?? 'Upload failed')
-        return
-      }
-      const { path } = await res.json()
       if (path) {
         setInputPath(path)
         setInputLabel(file.name)
       }
-    } catch {
-      setError('Upload failed')
+    } catch (err) {
+      setError(err.message ?? 'Upload failed')
     } finally {
       setUploading(false)
     }
@@ -367,11 +379,19 @@ export default function SubmitForm({ onJobCreated }) {
                           disabled={uploading}
                           className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 disabled:opacity-50 transition-colors"
                         >
-                          {uploading ? 'Uploading…' : 'Upload file'}
+                          {uploading ? `Uploading… ${uploadProgress}%` : 'Upload file'}
                         </button>
                       </>
                     )}
                   </div>
+                  {uploading && (
+                    <div className="w-48 mx-auto mt-3 bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
