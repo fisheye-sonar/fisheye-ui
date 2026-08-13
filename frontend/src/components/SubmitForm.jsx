@@ -282,7 +282,10 @@ export default function SubmitForm({ onJobCreated }) {
                 }
                 try {
                   const path = window.fisheyeElectron.getPathForFile(file)
-                  if (path) setInputPath(path)
+                  if (path) {
+                    setInputPath(path)
+                    setInputLabel(path)
+                  }
                 } catch (err) {
                   console.error('[fisheye] getPathForFile threw', err)
                 }
