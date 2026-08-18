@@ -26,17 +26,21 @@ from fisheye_ui.schemas import (
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-# Set by Caddy's basic_auth on the cloud deployment (forwarded as the
-# authenticated username - see deploy/gateway/README.md) so per-account job
-# limits can be enforced. Absent for desktop/local use, where nothing sits
-# in front of this app to authenticate a username - see usage.is_limited.
+# Set by Caddy's forward_auth on the cloud deployment (the gateway sidecar's
+# GET /verify sets this once a session cookie from self-serve login checks
+# out - see deploy/gateway/README.md) so per-account job limits can be
+# enforced. Absent for desktop/local use, where nothing sits in front of
+# this app to authenticate a username - see usage.is_limited.
 USER_HEADER = "X-Fisheye-User"
 
 
 @router.post("", response_model=JobCreatedResponse, status_code=201)
 async def create_job(request: JobCreateRequest, http_request: Request):
     username = http_request.headers.get(USER_HEADER, "")
-    if usage.is_limited(username) and usage.jobs_used(username) >= usage.MAX_JOBS_PER_USER:
+    if (
+        usage.is_limited(username)
+        and usage.jobs_used(username) >= usage.MAX_JOBS_PER_USER
+    ):
         raise HTTPException(
             status_code=403,
             detail=f"This account has reached its limit of {usage.MAX_JOBS_PER_USER} jobs.",

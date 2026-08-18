@@ -11,8 +11,13 @@ Environment=GPU_WORKER_PRIVATE_IP=REPLACE_ME
 Environment=GPU_WORKER_PORT=8000
 Environment=AWS_REGION=us-east-2
 Environment=IDLE_TIMEOUT_SECONDS=900
+# Self-serve access (see README.md's "Google Form setup" section) - both
+# required before /allowlist or /login will work.
+Environment=GATEWAY_ADMIN_SECRET=REPLACE_ME
+Environment=GATEWAY_SESSION_SECRET=REPLACE_ME
 # Bound to localhost only - not internet-facing, Caddy routes to it
-# internally for /gateway-status and /gateway-wake.
+# internally for /gateway-status, /gateway-wake, /allowlist, /login,
+# and /verify.
 ExecStart=/opt/fisheye-gateway-sidecar/venv/bin/uvicorn app:app --host 127.0.0.1 --port 9000
 Restart=on-failure
 RestartSec=5
