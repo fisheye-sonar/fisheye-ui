@@ -13,6 +13,7 @@ import boto3
 import httpx
 from botocore.exceptions import ClientError
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 logging.basicConfig(level=logging.INFO)
@@ -385,12 +386,14 @@ def login(payload: LoginRequest, response: Response):
 def verify(request: Request, response: Response):
     """What Caddy's forward_auth calls on every request. A 200 here (with
     X-Fisheye-User set) lets the request through to the GPU worker via
-    forward_auth's copy_headers; a 401 sends the browser to /login instead -
-    see the Caddyfile example in README.md."""
+    forward_auth's copy_headers. forward_auth relays this response to the
+    browser as-is on failure (it does NOT go through Caddy's handle_errors),
+    so unauthenticated requests get a real redirect straight from here
+    rather than a raw 401 the browser would just display verbatim."""
     token = request.cookies.get(SESSION_COOKIE_NAME)
     email = _verify_session(token) if token else None
     if not email:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        return RedirectResponse(url="/login", status_code=302)
 
     response.headers["X-Fisheye-User"] = email
     return {"ok": True}
