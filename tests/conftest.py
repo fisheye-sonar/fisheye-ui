@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fisheye_ui import job_manager as job_manager_module
+from fisheye_ui import usage as usage_module
 from fisheye_ui.app import app
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.job_manager import Job, job_manager
@@ -42,6 +43,7 @@ def isolated_dirs(tmp_path, monkeypatch):
     monkeypatch.setattr(job_manager_module, "UPLOAD_DIR", upload_dir)
     monkeypatch.setattr(files_module, "JOBS_DIR", jobs_dir)
     monkeypatch.setattr(files_module, "UPLOAD_DIR", upload_dir)
+    monkeypatch.setattr(usage_module, "USAGE_PATH", tmp_path / "fisheye-ui-usage.json")
     return {"jobs_dir": jobs_dir, "upload_dir": upload_dir}
 
 

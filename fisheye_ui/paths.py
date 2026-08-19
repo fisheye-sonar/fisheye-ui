@@ -21,3 +21,9 @@ UPLOAD_DIR = Path(
 # uploads (routes/files.py), but keeping it out of UPLOAD_DIR itself means
 # _sweep_stale_uploads' directory walk can never step on it.
 JOBS_DIR = UPLOAD_DIR.parent / "fisheye-ui-jobs"
+
+# Per-username job-count record for the cloud deployment's per-account job
+# limit (see usage.py). Rides along with the same persistent-disk override as
+# JOBS_DIR so counts survive a GPU worker stop/start cycle - counts are meant
+# to persist across sessions, not reset on restart.
+USAGE_PATH = UPLOAD_DIR.parent / "fisheye-ui-usage.json"

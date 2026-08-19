@@ -1,3 +1,15 @@
+# DO NOT `cp` this file over the live one on the gateway box to deploy
+# updates - the four REPLACE_ME values below get filled in with real,
+# secret/instance-specific values there, and a blind overwrite wipes them
+# back to placeholders (breaking the sidecar and invalidating every
+# existing login session). Diff against the live file and hand-merge any
+# actual changes (new/changed Environment= lines, ExecStart, etc.) instead.
+# Worst case scenario you need to find this information in the AWS console
+# and/or regenerate the GATEWAY_ADMIN_SECRET and GATEWAY_SESSION_SECRET with openssl
+# by running `openssl rand -base64 32`. Run it once for GATEWAY_ADMIN_SECRET and once
+# more for GATEWAY_SESSION_SECRET (each call gives a fresh random value — run it twice,
+# don't reuse the same output for both).
+
 [Unit]
 Description=FishEye UI gateway sidecar (wake-trigger, status, idle-watcher)
 After=network.target
@@ -11,8 +23,13 @@ Environment=GPU_WORKER_PRIVATE_IP=REPLACE_ME
 Environment=GPU_WORKER_PORT=8000
 Environment=AWS_REGION=us-east-2
 Environment=IDLE_TIMEOUT_SECONDS=900
+# Self-serve access (see README.md's "Google Form setup" section) - both
+# required before /allowlist or /login will work.
+Environment=GATEWAY_ADMIN_SECRET=REPLACE_ME
+Environment=GATEWAY_SESSION_SECRET=REPLACE_ME
 # Bound to localhost only - not internet-facing, Caddy routes to it
-# internally for /gateway-status and /gateway-wake.
+# internally for /gateway-status, /gateway-wake, /allowlist, /login,
+# and /verify.
 ExecStart=/opt/fisheye-gateway-sidecar/venv/bin/uvicorn app:app --host 127.0.0.1 --port 9000
 Restart=on-failure
 RestartSec=5
