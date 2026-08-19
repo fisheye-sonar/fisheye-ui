@@ -1,8 +1,10 @@
 # Gateway sidecar setup
 
 The sidecar is what makes the GPU worker sleep when idle and wake itself on
-demand. Caddy still handles TLS/Basic Auth/reverse proxy exactly as it does
-now. The sidecar is a separate small service alongside it, only reachable
+demand. It also handles login sessions
+and the access-request allowlist. Caddy still handles TLS/reverse proxy;
+auth is `forward_auth` calling into the sidecar rather than `basic_auth`.
+The sidecar is a separate small service alongside Caddy, only reachable
 from Caddy itself (bound to `127.0.0.1:9000`, never internet-facing).
 
 ## Deploying the sidecar
@@ -16,9 +18,12 @@ cd /opt/fisheye-gateway-sidecar
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 
-# Fill in GPU_WORKER_INSTANCE_ID and GPU_WORKER_PRIVATE_IP before installing:
+# First-time setup only - if a service file already exists here, DO NOT
+# overwrite it with this cp. It holds real, box-specific values (instance
+# ID, private IP, both secrets) that a fresh copy would wipe back to
+# REPLACE_ME. Diff and hand-merge any actual changes instead.
 sudo cp /path/to/repo/deploy/gateway/fisheye-gateway-sidecar.service /etc/systemd/system/
-sudo nano /etc/systemd/system/fisheye-gateway-sidecar.service   # replace the two REPLACE_ME values
+sudo nano /etc/systemd/system/fisheye-gateway-sidecar.service   # replace the four REPLACE_ME values
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now fisheye-gateway-sidecar
@@ -56,29 +61,86 @@ fails - there's nothing on the other end to answer. The fix is a
 `handle_errors` block: when the proxy to the GPU worker comes back
 unreachable, Caddy instead serves a small static page that polls
 `/gateway-status`, triggers `/gateway-wake`, and reloads once the worker
-answers again - at which point the normal proxy succeeds and the real app
+answers again at which point the normal proxy succeeds and the real app
 loads.
 
-Auth works the same way, one level up: Caddy's `forward_auth` calls the
+Auth works the same wa just one level up: Caddy's `forward_auth` calls the
 sidecar's `GET /verify` on every request. A 200 (with `X-Fisheye-User` set)
-lets the request through; a 401 - caught by another `handle_errors` block -
-sends the browser to the login page instead. Nobody, including a `/gateway-
-wake` request, reaches the sidecar's wake logic or the GPU worker without a
-valid session, so the "no wake without valid credentials" property (real
-money - GPU-hours) holds exactly as it did under `basic_auth`. (Access
-logging is optional now - the idle-watcher gets its activity signal from the
-GPU worker's own job state via `/jobs/active`, not from Caddy's log, so
-`log {}` below is just for general debugging if you want it.)
+lets the request through. On failure, **`/verify` itself returns a `302`
+redirect to `/login`** (not a 401) - `forward_auth` relays the auth
+backend's response to the client as-is on failure, it does **not** route
+through Caddy's `handle_errors`, so the redirect has to come from the
+sidecar directly rather than from a Caddyfile-level error handler. Nobody,
+including a `/gateway-wake` request, reaches the sidecar's wake logic or the
+GPU worker without a valid session, so the "no wake without valid
+credentials" property (real money - GPU-hours) holds exactly as it did
+under `basic_auth`. (Access logging is optional now - the idle-watcher gets
+its activity signal from the GPU worker's own job state via `/jobs/active`,
+not from Caddy's log, so `log {}` below is just for general debugging if
+you want it.)
+
+This is the config running in production (confirmed working
+end-to-end incl. login, per-account job limits, and live WebSocket progress
+streaming) as of 2026-08-19:
 
 ```
 your-hostname {
-	# Unauthenticated on purpose - this is what forward_auth sends people
-	# to on a 401, so it can't itself require auth.
-	@login path /login /login.html /fisheye_blue_combined.svg
-	handle @login {
+	# Every non-browser caller (the login form's own POST, and the Apps
+	# Script's POST to /allowlist) needs an explicit unauthenticated route
+	# here - anything that falls through to the catch-all handle{} below
+	# goes through forward_auth, and neither of these sends a session
+	# cookie. IMPORTANT: matcher blocks need one property per line -
+	# `method GET path /login` on a single line is NOT two conditions,
+	# Caddy parses it as `method` taking three arguments, so the path
+	# restriction silently never applies. caddy validate will NOT catch
+	# this (it's syntactically valid, just semantically wrong).
+	@loginPage {
+		method GET
+		path /login
+	}
+	handle @loginPage {
 		root * /opt/fisheye-gateway-sidecar/static
-		rewrite /login /login.html
-		reverse_proxy /login 127.0.0.1:9000
+		rewrite * /login.html
+		file_server
+	}
+
+	@loginSubmit {
+		method POST
+		path /login
+	}
+	handle @loginSubmit {
+		reverse_proxy 127.0.0.1:9000
+	}
+
+	@loginHtml path /login.html
+	handle @loginHtml {
+		root * /opt/fisheye-gateway-sidecar/static
+		file_server
+	}
+
+	@allowlist {
+		method POST
+		path /allowlist
+	}
+	handle @allowlist {
+		reverse_proxy 127.0.0.1:9000
+	}
+
+	@sidecar path /gateway-status /gateway-wake
+	handle @sidecar {
+		forward_auth 127.0.0.1:9000 {
+			uri /verify
+			copy_headers X-Fisheye-User
+			header_up Cookie {http.request.header.Cookie}
+			header_up Connection ""
+			header_up Upgrade ""
+		}
+		reverse_proxy 127.0.0.1:9000
+	}
+
+	@wakeAssets path /fisheye_blue_combined.svg
+	handle @wakeAssets {
+		root * /opt/fisheye-gateway-sidecar/static
 		file_server
 	}
 
@@ -86,24 +148,14 @@ your-hostname {
 		forward_auth 127.0.0.1:9000 {
 			uri /verify
 			copy_headers X-Fisheye-User
+			header_up Cookie {http.request.header.Cookie}
+			header_up Connection ""
+			header_up Upgrade ""
 		}
-
-		@sidecar path /gateway-status /gateway-wake
-		handle @sidecar {
-			reverse_proxy 127.0.0.1:9000
-		}
-
-		reverse_proxy GPU_WORKER_PRIVATE_IP:8000 {
-			fail_duration 10s
-		}
+		reverse_proxy GPU_WORKER_PRIVATE_IP:8000
 	}
 
 	handle_errors {
-		@unauthenticated expression `{http.error.status_code} == 401`
-		handle @unauthenticated {
-			redir /login 302
-		}
-
 		@unreachable expression `{http.error.status_code} in [502, 503, 504]`
 		handle @unreachable {
 			root * /opt/fisheye-gateway-sidecar/static
@@ -111,14 +163,33 @@ your-hostname {
 			file_server
 		}
 	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			mode 644
+		}
+		format json
+	}
 }
 ```
 
-(The `reverse_proxy /login 127.0.0.1:9000` line inside the `@login` handler
-is what routes the login *form's POST* to the sidecar's `POST /login` -
-everything else matched by `@login`, i.e. `GET /login` and the static
-assets, falls through to `file_server` instead. Validate the exact matcher
-precedence with `caddy validate` before reloading, same as always.)
+Two notes on the `header_up Cookie {http.request.header.Cookie}` /
+`header_up Connection ""` / `header_up Upgrade ""` lines inside each
+`forward_auth` block:
+
+- `header_up Cookie ...` makes sure the session cookie actually reaches the
+  auth check. Without it, forward_auth's behavior around forwarding the
+  original request's `Cookie` header wasn't reliable enough to depend on in
+  practice.
+- `header_up Connection ""` / `header_up Upgrade ""` strip those two
+  headers from just the auth sub-request. Without this, a WebSocket
+  upgrade request (e.g. `GET /jobs/{id}/stream`) causes forward_auth's
+  *auth check itself* to also attempt a WebSocket upgrade against
+  `/verify` - which has no WebSocket handler, so it gets rejected with a
+  403 that then kills the real connection before it's even established.
+  Setting a header to `""` in Caddy removes it entirely. The real
+  `reverse_proxy` call right after `forward_auth` is untouched and still
+  upgrades normally to the GPU worker once auth passes.
 
 `copy_headers X-Fisheye-User` is what forwards the session's verified email
 to the app, which is what lets it enforce a per-account job limit (10 jobs
@@ -138,6 +209,10 @@ After editing, same as always:
 sudo caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
+Remember `caddy validate` only checks syntax, not the two semantic gotchas
+above (matcher line-splitting, forward_auth/handle_errors interaction) - if
+something's not working even though validate passes, that's the first
+place to look.
 
 ## Google Form setup (self-serve access requests)
 
@@ -184,14 +259,9 @@ the sidecar to allow it in - no SSH, no Caddyfile edit, no reload.
 5. Test it: submit the Form yourself, confirm the email arrives, then sign
    in at `/login` with that email/code.
 
-Losing a code doesn't require any admin action - resubmitting the Form
-overwrites that email's entry in the allowlist with a fresh code (see
-`POST /allowlist` in `sidecar/app.py`, which upserts).
-
 ## Wake page
 
-`static/waking.html` is a small, dependency-free HTML/JS page (no build
-step - deploy it as-is) that Caddy falls back to whenever the GPU worker is
+`static/waking.html` is a small, dependency-free HTML/JS page) that Caddy falls back to whenever the GPU worker is
 unreachable. On load it:
 
 1. `GET /gateway-status`. If `asleep`, immediately `POST /gateway-wake` to
@@ -211,18 +281,24 @@ asleep worker, with no separate action needed.
 
 ## Idle detection
 
-The idle-watcher's activity signal is the GPU worker's own job state via
-`GET /jobs/active` (`{"active": bool, "idle_seconds": float | null}`), not
-HTTP traffic. The rule:
+The idle-watcher's activity signal is the GPU worker's own job *and upload*
+state via `GET /jobs/active` (`{"active": bool, "idle_seconds": float |
+null}`), not HTTP traffic. `active` is true if either a job is
+pending/running **or** a file is currently uploading, a large upload can
+take a while with no job existing yet, and that shouldn't be treated as
+idle time either. The rule:
 
-- A job is pending/running -> never stop, regardless of how long it's
-  been running or how long since the last request.
-- No job running -> idle time is measured from when the *most recent job
-  finished* (`idle_seconds`). A user composing the form, or just reading a
-  completed job's results with the tab open, isn't "activity" - only job
-  start/finish moves the clock.
-- No job has ever run yet this wake cycle (`idle_seconds` is `null`) -> the
-  sidecar falls back to time since the worker became `ready`.
+- A job is pending/running, or a file is currently uploading -> never stop,
+  regardless of how long it's been running or how long since the last
+  request.
+- Neither is active -> idle time is measured from whichever finished most
+  recently, a job *or* an upload (`idle_seconds`). A user composing the
+  form, or just reading a completed job's results with the tab open, isn't
+  "activity." Only a job or upload actually starting/finishing moves the
+  clock.
+- No job or upload has ever finished yet this wake cycle (`idle_seconds` is
+  `null`) -> the sidecar falls back to time since the worker became
+  `ready`.
 - The worker can't be reached to ask -> treated as "don't know," not as
   "no active jobs," so a transient network blip can't cause a stop
   mid-job.
