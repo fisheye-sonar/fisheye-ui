@@ -1,13 +1,14 @@
 # Installing FishEye on Windows
 
-1. Go to the [FishEye releases page](https://github.com/fisheye-sonar/fisheye-ui/releases)
+1. Go to the
+   [FishEye releases page](https://github.com/fisheye-sonar/fisheye-ui/releases)
    on GitHub and find the most recent release (e.g. `v1.0.0-beta.2`). Scroll
    down to **Assets** and click the file named `win-setup.exe`.
 
-2. Wait for the download to finish. Depending on your browser, you may need
-   to open the Downloads panel, click the **⋯** (three dots) next to the
-   file, and choose **Keep**. You may then be asked to confirm you trust the
-   file, choose **Keep Anyway**.
+2. Wait for the download to finish. Depending on your browser, you may need to
+   open the Downloads panel, click the **⋯** (three dots) next to the file, and
+   choose **Keep**. You may then be asked to confirm you trust the file, choose
+   **Keep Anyway**.
 
 3. Open your Downloads folder and double-click `win-setup.exe`.
 
@@ -23,4 +24,5 @@
 Once you make a selection, installation finishes and FishEye opens
 automatically.
 
-Still having trouble? See [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).
+Still having trouble? See
+[Troubleshooting](../04-troubleshooting/01-troubleshooting.md).
