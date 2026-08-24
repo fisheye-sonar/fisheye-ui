@@ -23,4 +23,4 @@
 Once you make a selection, installation finishes and FishEye opens
 automatically.
 
-Still having trouble? See [Troubleshooting](../troubleshooting/troubleshooting.md).
+Still having trouble? See [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).

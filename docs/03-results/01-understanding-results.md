@@ -36,4 +36,4 @@ if this happens.
 
 The in-app table shows totals only. For frame-by-frame detections,
 individual fish tracks, or files formatted for other software, see
-[Output Files](output-files.md).
+[Output Files](02-output-files.md).

@@ -1,7 +1,7 @@
 # Reporting a Problem
 
 If FishEye isn't behaving as expected, first check
-[Troubleshooting](../troubleshooting/troubleshooting.md) — your issue
+[Troubleshooting](../04-troubleshooting/01-troubleshooting.md) — your issue
 may already have a fix there. Otherwise, please
 [open a bug report](https://github.com/fisheye-sonar/fisheye-ui/issues/new?template=bug_report.yaml)
 on GitHub.

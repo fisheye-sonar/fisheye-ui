@@ -34,4 +34,4 @@ You should only need to do the Terminal step **once** per install. These
 instructions are temporary as they won't be needed anymore once the app is
 signed and notarized.
 
-Still having trouble? See [Troubleshooting](../troubleshooting/troubleshooting.md).
+Still having trouble? See [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).

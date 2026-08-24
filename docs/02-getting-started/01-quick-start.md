@@ -16,7 +16,7 @@ the folder.
 ## 3. Select a model
 
 The dropdown is already set to the recommended default, **YOLOv5m v0**. To learn about the other options, see
-[Choosing a Model](choosing-a-model.md).
+[Choosing a Model](02-choosing-a-model.md).
 
 ## 4. Choose where to save results (optional)
 
@@ -36,5 +36,5 @@ hardware. Larger files and folders with many files take longer.
 
 When processing finishes, FishEye shows a summary of fish counts right
 in the app, and the result files are saved to your output folder. See
-[Understanding Your Results](../results/understanding-results.md) and
-[Output Files](../results/output-files.md) for details on what you'll get.
+[Understanding Your Results](../03-results/01-understanding-results.md) and
+[Output Files](../03-results/02-output-files.md) for details on what you'll get.
