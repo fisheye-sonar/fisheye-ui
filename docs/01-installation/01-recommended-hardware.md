@@ -20,7 +20,7 @@ files significantly faster.
 **How to tell which one a laptop has:** look at the listed graphics. Integrated
 graphics show up as something like "Intel Iris Xe Graphics" or "AMD Radeon
 Graphics" with no separate model number. A dedicated GPU is listed by name and
-model, e.g. "NVIDIA GeForce RTX 4070" — if you see an NVIDIA GeForce RTX (or
+model, e.g. "NVIDIA GeForce RTX 4070". If you see an NVIDIA GeForce RTX (or
 similar) listed, that's a dedicated GPU.
 
 > Apple Silicon Macs (M1 and newer) have GPU acceleration built in
@@ -52,7 +52,7 @@ machines, prioritize:
   speed.
 - **A newer GPU generation.** The number after "RTX" indicates how new/fast the
   GPU is — higher is better. Aim for RTX 40-series or newer (e.g. RTX 4060,
-  4070, 4080) if you can. Avoid older cards like a GTX 1080 — even though it's
+  4070, 4080) if you can. Avoid older cards like a GTX 1080, even though it's
   a dedicated GPU, it predates the RTX line and is far slower for this kind of
   work.
 - **16GB of RAM or more** (32GB is comfortable).
