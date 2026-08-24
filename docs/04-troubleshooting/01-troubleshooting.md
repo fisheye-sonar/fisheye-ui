@@ -3,7 +3,7 @@
 ## FishEye won't open on macOS
 
 This is almost always the Gatekeeper warning covered in
-[Installing FishEye on macOS](../installation/macos-installation.md).
+[Installing FishEye on macOS](../01-installation/01-macos-installation.md).
 MacOS blocks the app because it isn't notarized yet, not because
 anything is actually wrong with it. Follow the steps there (running
 `xattr -cr "/Applications/FishEye.app"` in Terminal) to fix it.
@@ -11,14 +11,14 @@ anything is actually wrong with it. Follow the steps there (running
 If FishEye opens briefly and then shows an error saying it failed to
 start, the app's background service didn't start correctly. Try
 restarting your computer and opening FishEye again. If it keeps
-happening, [report a bug](../support/reporting-a-bug.md) and include the
+happening, [report a bug](../05-support/01-reporting-a-bug.md) and include the
 exact error message from the dialog.
 
 ## Windows says the installer isn't trusted
 
 This is Windows SmartScreen, and it's expected for now since the
 installer isn't signed yet — see
-[Installing FishEye on Windows](../installation/windows-installation.md)
+[Installing FishEye on Windows](../01-installation/02-windows-installation.md)
 for the "Keep" / "Keep anyway" steps to get past it.
 
 ## GPU acceleration isn't available
@@ -33,7 +33,7 @@ usually means:
 - **(Windows only) The additional GPU files haven't been installed
   yet.** The first time you launch FishEye on Windows, you may be asked
   to download extra files needed for GPU acceleration (see step 5 of
-  [Installing FishEye on Windows](../installation/windows-installation.md)).
+  [Installing FishEye on Windows](../01-installation/02-windows-installation.md)).
   If that download was skipped or failed, GPU acceleration won't be
   available until you complete it. Try reopening FishEye to be
   prompted again.
@@ -77,7 +77,7 @@ explaining what happened. Common causes include:
 - **The app or your computer was restarted** while a job was running.
 
 Click **Show log** on the progress screen for more detail, and include
-it when [reporting a bug](../support/reporting-a-bug.md) if the message
+it when [reporting a bug](../05-support/01-reporting-a-bug.md) if the message
 doesn't explain what went wrong.
 
 Note this is different from individual files failing partway through a

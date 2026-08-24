@@ -7,7 +7,7 @@ Detailed CSV, and ARISFish Count File are selected by default; MOT is
 optional.
 
 For an explanation of the upstream/downstream counts themselves, see
-[Understanding Your Results](understanding-results.md).
+[Understanding Your Results](01-understanding-results.md).
 
 ## Summary CSV
 
