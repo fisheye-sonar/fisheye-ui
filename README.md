@@ -6,8 +6,9 @@ A web-based UI for running [FishEye](https://github.com/fisheye-sonar/fisheye/tr
 
 Looking to just run FishEye, not develop it? See the download/install guide
 for your platform:
-- [Windows](docs/windows-installation.md)
-- [macOS](docs/macos-installation.md)
+- [Windows](docs/01-installation/03-windows-installation.md)
+- [macOS](docs/01-installation/02-macos-installation.md)
+- [Recommended hardware](docs/01-installation/01-recommended-hardware.md) — buying a new machine? Read this first.
 
 ## Requirements
 

@@ -30,7 +30,8 @@ Click **Run inference** to begin processing. You'll see a live progress
 screen while FishEye works.
 
 Processing time depends on the size of your files and your computer's
-hardware. Larger files and folders with many files take longer.
+hardware (see [Recommended Hardware](../01-installation/01-recommended-hardware.md)).
+Larger files and folders with many files take longer.
 
 ## 6. View your results
 

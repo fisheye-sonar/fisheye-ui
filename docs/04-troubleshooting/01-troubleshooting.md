@@ -3,7 +3,7 @@
 ## FishEye won't open on macOS
 
 This is almost always the Gatekeeper warning covered in
-[Installing FishEye on macOS](../01-installation/01-macos-installation.md).
+[Installing FishEye on macOS](../01-installation/02-macos-installation.md).
 MacOS blocks the app because it isn't notarized yet, not because
 anything is actually wrong with it. Follow the steps there (running
 `xattr -cr "/Applications/FishEye.app"` in Terminal) to fix it.
@@ -18,7 +18,7 @@ exact error message from the dialog.
 
 This is Windows SmartScreen, and it's expected for now since the
 installer isn't signed yet — see
-[Installing FishEye on Windows](../01-installation/02-windows-installation.md)
+[Installing FishEye on Windows](../01-installation/03-windows-installation.md)
 for the "Keep" / "Keep anyway" steps to get past it.
 
 ## GPU acceleration isn't available
@@ -33,7 +33,7 @@ usually means:
 - **(Windows only) The additional GPU files haven't been installed
   yet.** The first time you launch FishEye on Windows, you may be asked
   to download extra files needed for GPU acceleration (see step 5 of
-  [Installing FishEye on Windows](../01-installation/02-windows-installation.md)).
+  [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
   If that download was skipped or failed, GPU acceleration won't be
   available until you complete it. Try reopening FishEye to be
   prompted again.
@@ -45,6 +45,13 @@ A few things affect processing speed:
 - **Running on CPU instead of GPU.** If GPU acceleration isn't
   available on your computer (see above), FishEye still works, but
   processing takes longer.
+- **Frames per batch is set low on CPU.** When running on CPU, FishEye
+  defaults to processing one frame at a time ("Frames per batch" under
+  Advanced options → Platform configuration), which is safe but slow.
+  Try raising it the batch size to 4 or 8 as a starting point and see if
+  processing speeds up. Higher values use more memory, so if FishEye
+  slows down, freezes, or crashes instead of speeding up, lower it back
+  down.
 - **Large files or large batches.** Bigger sonar files and folders with
   many files simply take more time to process.
 - **Other demanding apps running at the same time.** Try closing other
