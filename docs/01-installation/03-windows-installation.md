@@ -15,14 +15,35 @@
 4. You'll see an "Installing, please wait…" screen while the installer sets
    things up.
 
-5. A window will ask whether to download additional files needed for GPU
-   acceleration:
+5. A window will ask how you'd like to get the additional files FishEye needs
+   to run (this step happens on every install and can't be skipped):
    - If you're connected to the internet, choose **Download automatically**.
    - If you've already downloaded these files separately, choose **I already
      have the files** instead.
 
 Once you make a selection, installation finishes and FishEye opens
 automatically.
+
+## If you already have the files (no internet on this machine)
+
+1. On a computer with internet access, go back to the same release's
+   **Assets** list from step 1 and download every file named
+   `FishEye-<version>-gpu-runtime-win.part1-of-N.zip`,
+   `...part2-of-N.zip`, and so on — there may be several. Keep their
+   original file names.
+
+2. Copy all of those files to the Windows computer you're installing
+   FishEye on (e.g. via USB drive).
+
+3. When step 5 above asks how to get the files, choose **I already have the
+   files…**. A window will open asking you to select files, select **all**
+   of the part files together (not one at a time), then confirm.
+
+This covers FishEye itself, but the detection model it runs is downloaded
+separately the first time you use it, and that download also needs internet.
+See
+["No internet on this machine?"](../02-getting-started/02-choosing-a-model.md#no-internet-on-this-machine)
+for how to get the model file onto an offline machine too.
 
 Still having trouble? See
 [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).

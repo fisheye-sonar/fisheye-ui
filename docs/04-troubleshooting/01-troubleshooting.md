@@ -29,12 +29,12 @@ shows as unavailable in the device dropdown, it usually means:
 
 - **Your computer doesn't have a supported GPU.** FishEye will fall back to CPU
   processing automatically. This still works, just slower.
-- **(Windows only) The additional GPU files haven't been installed yet.** The
-  first time you launch FishEye on Windows, you may be asked to download extra
-  files needed for GPU acceleration (see step 5 of
-  [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
-  If that download was skipped or failed, GPU acceleration won't be available
-  until you complete it. Try reopening FishEye to be prompted again.
+- **(Windows only) The additional files haven't been installed yet.** The
+  first time you launch FishEye on Windows (and again after each update),
+  you'll be asked to download extra files FishEye needs to run (see step 5
+  of [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
+  If that download is closed before finishing or fails, FishEye won't run.
+  Reopen it to be prompted again and complete the download.
 
 ## FishEye is running slowly
 
@@ -76,6 +76,11 @@ what happened. Common causes include:
   service mid-job, you'll see a "Lost connection to server" message. Try
   restarting FishEye and running the job again.
 - **The app or your computer was restarted** while a job was running.
+- **No internet on first use of a model.** The first time you use a
+  particular model, FishEye downloads it in the background. If there's no
+  internet connection, that download fails and the job can't run. See
+  ["No internet on this machine?"](../02-getting-started/02-choosing-a-model.md#no-internet-on-this-machine)
+  to set the model up manually ahead of time.
 
 Click **Show log** on the progress screen for more detail, and include it when
 [reporting a bug](../05-support/01-reporting-a-bug.md) if the message doesn't
