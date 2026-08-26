@@ -33,7 +33,7 @@ shows as unavailable in the device dropdown, it usually means:
   first time you launch FishEye on Windows (and again after each update),
   you'll be asked to download extra files FishEye needs to run (see step 5
   of [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
-  If that download is closed before finishing or fails, FishEye won't open.
+  If that download is closed before finishing or fails, FishEye won't run.
   Reopen it to be prompted again and complete the download.
 
 ## FishEye is running slowly
