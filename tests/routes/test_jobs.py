@@ -222,7 +222,7 @@ class TestDownloadOutput:
         assert res.status_code == 404
 
     def test_serves_existing_file(self, client, make_job, tmp_path):
-        (tmp_path / "foo.csv").write_text("a,b\n1,2\n")
+        (tmp_path / "foo.csv").write_text("a,b\n1,2\n", newline="")
         make_job(id="job-123", output_dir=str(tmp_path))
         res = client.get("/jobs/job-123/outputs/foo.csv")
         assert res.status_code == 200
@@ -231,7 +231,7 @@ class TestDownloadOutput:
     def test_serves_nested_file(self, client, make_job, tmp_path):
         nested = tmp_path / "clipA"
         nested.mkdir()
-        (nested / "detail.csv").write_text("x\n1\n")
+        (nested / "detail.csv").write_text("x\n1\n", newline="")
         make_job(id="job-123", output_dir=str(tmp_path))
         res = client.get("/jobs/job-123/outputs/clipA/detail.csv")
         assert res.status_code == 200
