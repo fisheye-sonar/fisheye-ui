@@ -33,5 +33,12 @@ You should only need to do the Terminal step **once** per install. These
 instructions are temporary as they won't be needed anymore once the app is
 signed and notarized.
 
+macOS doesn't need any additional download to run FishEye itself. However,
+the detection model it runs is downloaded separately the first time you use
+it, and that download needs internet. If this Mac won't have internet
+access, see
+["No internet on this machine?"](../02-getting-started/02-choosing-a-model.md#no-internet-on-this-machine)
+for how to get the model file on beforehand.
+
 Still having trouble? See
 [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).

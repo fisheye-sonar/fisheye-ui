@@ -29,6 +29,23 @@ FishEye downloads the chosen automatically in the background. You'll need an
 internet connection for that one-time download. After that, the model is stored
 on your computer and ready to use instantly, even offline.
 
+### No internet on this machine?
+
+If the computer running FishEye won't have internet access, the automatic
+download won't work. Instead:
+
+1. On a computer with internet access, go to the
+   [fisheye releases page](https://github.com/fisheye-sonar/fisheye/releases)
+   (note: this is a different repository than the FishEye app itself) and
+   download the `.pt` file matching the model you want (e.g.
+   `cfc_detect_yolov5m_v0.pt` for YOLOv5m v0).
+
+2. Copy that file to the computer running FishEye (e.g. via USB drive) and
+   place it anywhere you like.
+
+3. In FishEye, open Advanced options and enter the file's location in the
+   **custom model weights path (optional)** field instead of using the model dropdown.
+
 ## Using your own model file
 
 Advanced users can use a custom model file instead of one of the options above,

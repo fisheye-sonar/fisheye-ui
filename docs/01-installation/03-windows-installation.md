@@ -39,5 +39,11 @@ automatically.
    files…**. A window will open asking you to select files, select **all**
    of the part files together (not one at a time), then confirm.
 
+This covers FishEye itself, but the detection model it runs is downloaded
+separately the first time you use it, and that download also needs internet.
+See
+["No internet on this machine?"](../02-getting-started/02-choosing-a-model.md#no-internet-on-this-machine)
+for how to get the model file onto an offline machine too.
+
 Still having trouble? See
 [Troubleshooting](../04-troubleshooting/01-troubleshooting.md).

@@ -76,6 +76,11 @@ what happened. Common causes include:
   service mid-job, you'll see a "Lost connection to server" message. Try
   restarting FishEye and running the job again.
 - **The app or your computer was restarted** while a job was running.
+- **No internet on first use of a model.** The first time you use a
+  particular model, FishEye downloads it in the background. If there's no
+  internet connection, that download fails and the job can't run. See
+  ["No internet on this machine?"](../02-getting-started/02-choosing-a-model.md#no-internet-on-this-machine)
+  to set the model up manually ahead of time.
 
 Click **Show log** on the progress screen for more detail, and include it when
 [reporting a bug](../05-support/01-reporting-a-bug.md) if the message doesn't
