@@ -36,7 +36,7 @@ automatically.
    FishEye on (e.g. via USB drive).
 
 3. When step 5 above asks how to get the files, choose **I already have the
-   files…**. A window will open asking you to select files — select **all**
+   files…**. A window will open asking you to select files, select **all**
    of the part files together (not one at a time), then confirm.
 
 Still having trouble? See
