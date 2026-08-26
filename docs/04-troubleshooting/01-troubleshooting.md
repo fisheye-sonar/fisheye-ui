@@ -29,12 +29,12 @@ shows as unavailable in the device dropdown, it usually means:
 
 - **Your computer doesn't have a supported GPU.** FishEye will fall back to CPU
   processing automatically. This still works, just slower.
-- **(Windows only) The additional GPU files haven't been installed yet.** The
-  first time you launch FishEye on Windows, you may be asked to download extra
-  files needed for GPU acceleration (see step 5 of
-  [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
-  If that download was skipped or failed, GPU acceleration won't be available
-  until you complete it. Try reopening FishEye to be prompted again.
+- **(Windows only) The additional files haven't been installed yet.** The
+  first time you launch FishEye on Windows (and again after each update),
+  you'll be asked to download extra files FishEye needs to run (see step 5
+  of [Installing FishEye on Windows](../01-installation/03-windows-installation.md)).
+  If that download is closed before finishing or fails, FishEye won't open.
+  Reopen it to be prompted again and complete the download.
 
 ## FishEye is running slowly
 
