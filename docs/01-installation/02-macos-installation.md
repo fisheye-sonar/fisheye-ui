@@ -24,7 +24,7 @@ yet.)*
 5. Copy and paste the following command into Terminal, then press **Return**:
 
    ```
-   xattr -cr "/Applications/FishEye.app"
+   /usr/bin/xattr -cr "/Applications/FishEye.app"
    ```
 
 6. Open **FishEye** again from your Applications folder.

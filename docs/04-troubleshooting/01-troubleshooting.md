@@ -6,7 +6,7 @@ This is almost always the Gatekeeper warning covered in
 [Installing FishEye on macOS](../01-installation/02-macos-installation.md).
 MacOS blocks the app because it isn't notarized yet, not because anything is
 actually wrong with it. Follow the steps there (running
-`xattr -cr "/Applications/FishEye.app"` in Terminal) to fix it.
+`/usr/bin/xattr -cr "/Applications/FishEye.app"` in Terminal) to fix it.
 
 If FishEye opens briefly and then shows an error saying it failed to start, the
 app's background service didn't start correctly. Try restarting your computer
