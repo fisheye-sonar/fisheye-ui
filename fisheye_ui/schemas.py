@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fisheye.enums import ExportType, UpstreamDirectionTypes
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, model_validator
 
-from fisheye_ui.enums import JobStatus
+from fisheye_ui.enums import JobStatus, TelemetryChoice
 
 
 class JobCreateRequest(BaseModel):
@@ -111,3 +111,42 @@ class TelemetryPayload(BaseModel):
     distance_offset: float = 0.0
     counts: List[FileCount]
     track_stats: List[FileTrackStats]
+
+
+class TelemetryContact(BaseModel):
+    """Contact details a user can attach when they choose to be reachable
+    about their results. Only email is required."""
+
+    name: Optional[str] = None
+    institution: Optional[str] = None
+    email: EmailStr
+
+
+class TelemetrySettings(BaseModel):
+    """The user's opt-in telemetry choice, persisted by telemetry_settings.py.
+
+    choice is None until the user has made a choice, which is what tells
+    the frontend to show the opt-in dialog - and means nothing is sent.
+    """
+
+    choice: Optional[TelemetryChoice] = None
+    contact: Optional[TelemetryContact] = None
+
+    @model_validator(mode="after")
+    def _contact_only_with_contact_choice(self) -> "TelemetrySettings":
+        # Contact details are dropped for any other choice, so switching
+        # from "contact" to "anonymous" can never leave them behind to be
+        # sent later.
+        if self.choice != TelemetryChoice.CONTACT:
+            self.contact = None
+        elif self.contact is None:
+            raise ValueError("contact details are required for the 'contact' choice")
+        return self
+
+
+class TelemetrySettingsRequest(TelemetrySettings):
+    """Body for PUT /settings/telemetry. Same as TelemetrySettings except a
+    choice is required - "not chosen yet" is only ever the starting state,
+    never something a client sets."""
+
+    choice: TelemetryChoice
