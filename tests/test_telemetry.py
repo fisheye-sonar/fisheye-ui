@@ -2,14 +2,15 @@ import json
 from datetime import datetime
 
 from fisheye_ui.enums import JobStatus
-from fisheye_ui.job_manager import Job, build_telemetry_payload
+from fisheye_ui.job_manager import Job, _ProgressQueue, build_telemetry_payload
 
 
 def _job(**overrides):
     defaults = dict(
         id="job-123",
         status=JobStatus.COMPLETED,
-        created_at=datetime(2026, 9, 17, 12, 0, 0),
+        created_at=datetime(2026, 9, 17, 11, 50, 0),
+        started_at=datetime(2026, 9, 17, 12, 0, 0),
         finished_at=datetime(2026, 9, 17, 12, 5, 0),
         config={
             "input_path": "/Users/personal_name_here/TMP/klamath_site_7/run.aris",
@@ -163,8 +164,131 @@ class TestBuildTelemetryPayload:
 
         assert payload.duration_seconds == 300.0
 
+    def test_duration_excludes_time_waiting_in_queue(self):
+        """created_at is 10 minutes before started_at - that queue wait
+        must not count toward duration."""
+        payload = build_telemetry_payload(_job())
+
+        assert payload.started_at == datetime(2026, 9, 17, 12, 0, 0)
+        assert payload.duration_seconds == 300.0
+
+    def test_processing_seconds_from_job_finished_event(self):
+        job = _job(
+            telemetry_events=[
+                {"event": "job_finished", "duration_sec": 240.5},
+            ]
+        )
+        payload = build_telemetry_payload(job)
+
+        assert payload.processing_seconds == 240.5
+        assert payload.duration_seconds == 300.0  # unchanged, wall-clock
+
+    def test_processing_seconds_none_when_job_failed(self):
+        """job_finished is only logged on success, so a failed job still
+        gets duration_seconds but no processing_seconds."""
+        job = _job(status=JobStatus.FAILED, error_type="RuntimeError")
+        payload = build_telemetry_payload(job)
+
+        assert payload.duration_seconds == 300.0
+        assert payload.processing_seconds is None
+
+    def test_duration_none_when_cancelled_before_running(self):
+        job = _job(started_at=None, status=JobStatus.CANCELLED)
+        payload = build_telemetry_payload(job)
+
+        assert payload.started_at is None
+        assert payload.duration_seconds is None
+
     def test_duration_none_when_job_not_finished(self):
         job = _job(finished_at=None, status=JobStatus.RUNNING)
         payload = build_telemetry_payload(job)
 
         assert payload.duration_seconds is None
+
+
+class TestProgressQueueTelemetryCapture:
+    def test_captures_only_whitelisted_fields(self):
+        events = []
+        q = _ProgressQueue(events)
+        q.put_nowait(
+            {
+                "event": "processed_file_stats",
+                "file_index": 0,
+                "num_tracks": 5,
+                "num_counts": 2,
+                "avg_bbox_width_meters": 0.4,
+                "filename": "should_not_be_captured.py",
+                "job_id": "job-123",
+            }
+        )
+
+        assert events == [
+            {
+                "event": "processed_file_stats",
+                "file_index": 0,
+                "num_tracks": 5,
+                "num_counts": 2,
+                "avg_bbox_width_meters": 0.4,
+            }
+        ]
+
+    def test_ignores_non_whitelisted_events(self):
+        """no_counts carries file_path - it must not be captured at all."""
+        events = []
+        q = _ProgressQueue(events)
+        q.put_nowait({"event": "no_counts", "file_index": 0, "file_path": "/a/b.aris"})
+        q.put_nowait({"event": "files_discovered", "num_files": 3})
+
+        assert events == []
+
+    def test_queue_still_receives_full_event_for_websocket(self):
+        events = []
+        q = _ProgressQueue(events)
+        event = {"event": "no_counts", "file_index": 0, "file_path": "/a/b.aris"}
+        q.put_nowait(event)
+
+        assert q.get_nowait() == event
+
+    def test_captures_through_fisheye_logging_setup(self):
+        """run_job() calls fisheye's setup_logging(), which replaces the
+        structlog processor chain - capture must still work after that,
+        via fisheye's own progress_queue routing."""
+        import structlog
+        from fisheye.common.logging import progress_queue as pq_var
+        from fisheye.common.logging import setup_logging
+
+        job = _job(telemetry_events=[])
+        job.progress_queue = _ProgressQueue(job.telemetry_events)
+        setup_logging(file_logging=False)
+        token = pq_var.set(job.progress_queue)
+        try:
+            log = structlog.get_logger()
+            log.info("job_started", app_version="1.1.0", detector_version="yolo-v3")
+            log.info(
+                "processed_file_stats",
+                file_index=0,
+                num_counts=2,
+                num_tracks=5,
+                avg_bbox_width_meters=0.4,
+                median_bbox_width_meters=0.38,
+                std_bbox_width_meters=0.05,
+            )
+            log.warning("no_counts", file_path="/Users/someone/run.aris", file_index=1)
+            log.info(
+                "job_finished",
+                job_id="job-123",
+                app_version="1.1.0",
+                detector_version="yolo-v3",
+                duration_sec=12.5,
+                num_files_processed=1,
+            )
+        finally:
+            pq_var.reset(token)
+
+        payload = build_telemetry_payload(job)
+        assert payload.app_version == "1.1.0"
+        assert payload.detector_version == "yolo-v3"
+        assert [s.file_index for s in payload.track_stats] == [0]
+        assert payload.processing_seconds == 12.5
+        assert {"event": "job_finished", "duration_sec": 12.5} in job.telemetry_events
+        assert all(e["event"] != "no_counts" for e in job.telemetry_events)

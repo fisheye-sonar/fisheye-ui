@@ -27,6 +27,21 @@ logger = structlog.get_logger()
 # FISHEYE_UI_MAX_CONCURRENT_JOBS.
 MAX_CONCURRENT_JOBS = int(os.environ.get("FISHEYE_UI_MAX_CONCURRENT_JOBS", "1"))
 
+# Log events (and, per event, the only fields) captured into
+# Job.telemetry_events. Fields are whitelisted rather than the whole event
+_TELEMETRY_FIELDS: Dict[str, tuple] = {
+    "job_started": ("app_version", "detector_version"),
+    "job_finished": ("duration_sec",),
+    "processed_file_stats": (
+        "file_index",
+        "num_tracks",
+        "num_counts",
+        "avg_bbox_width_meters",
+        "median_bbox_width_meters",
+        "std_bbox_width_meters",
+    ),
+}
+
 
 def _raise_in_thread(tid: int, exc_type: type) -> None:
     """Inject an exception into a running thread at its next Python bytecode."""
@@ -36,6 +51,35 @@ def _raise_in_thread(tid: int, exc_type: type) -> None:
     if res > 1:
         # Rolled back if something went wrong
         ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), None)
+
+
+class _ProgressQueue(_queue.Queue):
+    """A job's progress queue that also records whitelisted telemetry events.
+
+    Captured here rather than in a structlog processor because run_job()
+    calls fisheye's setup_logging(), which replaces the whole processor
+    chain (including fisheye_ui.logging's router). fisheye's own
+    _route_to_progress_queue survives that and puts every event onto this
+    queue, so this is the one hook that sees every event for the job.
+    """
+
+    def __init__(self, telemetry_events: List[Dict]) -> None:
+        super().__init__()
+        self._telemetry_events = telemetry_events
+
+    def put(
+        self, item: Any, block: bool = True, timeout: Optional[float] = None
+    ) -> None:
+        if isinstance(item, dict):
+            fields = _TELEMETRY_FIELDS.get(item.get("event"))
+            if fields is not None:
+                self._telemetry_events.append(
+                    {
+                        "event": item["event"],
+                        **{k: item[k] for k in fields if k in item},
+                    }
+                )
+        super().put(item, block, timeout)
 
 
 @dataclass
@@ -53,11 +97,16 @@ class Job:
     # send the full message - it frequently embeds the failing file's path.
     error_type: Optional[str] = None
     finished_at: Optional[datetime] = None
+    # When the job left the queue and actually began running (created_at
+    # is submission time, so it includes any wait for a free slot). Only
+    # used for the telemetry payload's duration, so not persisted.
+    started_at: Optional[datetime] = None
     progress_queue: Optional[Any] = field(default=None, repr=False)
     # Whitelisted structlog events captured during the run (job_started,
-    # job_finished, processed_file_stats) - see logging.py's progress
-    # router. Used only to build the opt-in telemetry payload; not
-    # persisted, not shown in the UI.
+    # job_finished, processed_file_stats) - see _ProgressQueue and
+    # _TELEMETRY_FIELDS.
+    # Used only to build the opt-in telemetry payload; not persisted, not
+    # shown in the UI.
     telemetry_events: List[Dict] = field(default_factory=list, repr=False)
     _thread_id: Optional[int] = field(default=None, repr=False)
 
@@ -117,8 +166,8 @@ class JobManager:
             created_at=datetime.utcnow(),
             config=config_dict,
             output_dir=config_dict.get("output_dir"),
-            progress_queue=_queue.Queue(),
         )
+        job.progress_queue = _ProgressQueue(job.telemetry_events)
         with self._lock:
             self._jobs[job_id] = job
         self._persist(job)
@@ -296,6 +345,7 @@ class JobManager:
                     return
 
                 job.status = JobStatus.RUNNING
+                job.started_at = datetime.utcnow()
                 self._persist(job)
                 _write_params_json(output_dir, job)
                 try:
@@ -421,19 +471,20 @@ def build_telemetry_payload(job: Job) -> TelemetryPayload:
 
     return TelemetryPayload(
         job_id=job.id,
-        app_version=job_started.get("app_version") or job_finished.get("app_version"),
+        app_version=job_started.get("app_version"),
         detector_version=job_started.get("detector_version"),
         os=sys.platform,
         device=platform_cfg.get("device"),
         status=job.status,
         error_type=job.error_type,
-        started_at=job.created_at,
+        started_at=job.started_at,
         finished_at=job.finished_at,
         duration_seconds=(
-            (job.finished_at - job.created_at).total_seconds()
-            if job.finished_at
+            (job.finished_at - job.started_at).total_seconds()
+            if job.started_at and job.finished_at
             else None
         ),
+        processing_seconds=job_finished.get("duration_sec"),
         file_count=len(job.results or []),
         export_options=(job.config or {}).get("export_options", []),
         upstream_direction=(job.config or {}).get("upstream_direction"),

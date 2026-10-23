@@ -96,9 +96,15 @@ class TelemetryPayload(BaseModel):
     device: Optional[str] = None
     status: JobStatus
     error_type: Optional[str] = None
-    started_at: datetime
+    # When the job began running not when it was submitted - None if it
+    # was cancelled while still queued
+    started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None
+    # fisheye's own duration_sec from job_finished: file processing only,
+    # excluding model load and UI overhead. None if the job failed since
+    # job_finished is only logged on success.
+    processing_seconds: Optional[float] = None
     file_count: int
     export_options: List[ExportType]
     upstream_direction: Optional[UpstreamDirectionTypes] = None
