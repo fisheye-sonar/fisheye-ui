@@ -167,7 +167,16 @@ function waitForHealth(port, timeoutMs = 120000) {
 async function startBackend() {
   const port = await getFreePort()
   backendProcess = spawn(backendPath(), [], {
-    env: { ...process.env, FISHEYE_UI_NO_BROWSER: '1', PORT: String(port) },
+    env: {
+      ...process.env,
+      FISHEYE_UI_NO_BROWSER: '1',
+      PORT: String(port),
+      // Keep the backend's persisted user settings (e.g. the telemetry
+      // opt-in choice) in the same per-OS app data folder as
+      // update-check.json and logs/, rather than its ~/.fisheye-ui
+      // fallback for running from the repo.
+      FISHEYE_UI_SETTINGS_DIR: app.getPath('userData'),
+    },
     // The backend writes a relative "logs/" dir when a job runs. Without an
     // explicit cwd, a packaged/double-clicked .app inherits Electron's own
     // working directory — typically "/" — where that write fails with

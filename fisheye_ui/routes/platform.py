@@ -6,7 +6,7 @@ from typing import List, Tuple
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from fisheye_ui import __version__
+from fisheye_ui import __version__, telemetry_settings
 
 router = APIRouter(prefix="/platform", tags=["platform"])
 
@@ -20,6 +20,7 @@ class PlatformResponse(BaseModel):
     available_devices: List[str]
     temporary_gpu_hosting: bool
     app_version: str
+    telemetry_enabled: bool
 
 
 def _native_file_picker_available() -> bool:
@@ -99,4 +100,7 @@ async def get_platform():
         # worker will be remote and headless too but shouldn't show this.
         temporary_gpu_hosting=bool(os.environ.get("FISHEYE_TEMPORARY_GPU_HOSTING")),
         app_version=__version__,
+        # Tells the frontend whether to show the telemetry opt-in dialog
+        # and footer link at all - see telemetry_settings.enabled().
+        telemetry_enabled=telemetry_settings.enabled(),
     )

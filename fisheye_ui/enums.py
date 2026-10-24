@@ -9,3 +9,11 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class TelemetryChoice(str, Enum):
+    """The user's opt-in telemetry choice."""
+
+    OFF = "off"
+    ANONYMOUS = "anonymous"
+    CONTACT = "contact"
