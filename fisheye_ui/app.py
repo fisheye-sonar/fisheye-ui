@@ -16,6 +16,7 @@ from fisheye_ui.routes.files import start_sweeper
 from fisheye_ui.routes.jobs import router as jobs_router
 from fisheye_ui.routes.platform import router as platform_router
 from fisheye_ui.routes.settings import router as settings_router
+from fisheye_ui.telemetry_upload import start_uploader
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
     configure_logging(job_manager.get_job_queue)
     threading.Thread(target=_preimport, daemon=True).start()
     start_sweeper()
+    start_uploader()
     yield
 
 

@@ -15,6 +15,7 @@ import structlog
 from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
+from fisheye_ui import telemetry_upload
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
 from fisheye_ui.schemas import FileCount, FileTrackStats, TelemetryPayload
@@ -374,6 +375,24 @@ class JobManager:
                 self._persist(job)
         finally:
             _cleanup_upload_input(job)
+            _enqueue_telemetry(job)
+
+
+def _enqueue_telemetry(job: Job) -> None:
+    """Queue the job's opt-in telemetry report for the next daily upload
+    (telemetry_upload.enqueue checks the user's choice). Only jobs that
+    actually started running are reported - one cancelled while still
+    queued has nothing worth sending. Never raises."""
+    if job.started_at is None or job.status not in (
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    ):
+        return
+    try:
+        telemetry_upload.enqueue(build_telemetry_payload(job))
+    except Exception:
+        logger.warning("telemetry_enqueue_failed", job_id=job.id)
 
 
 def _write_params_json(output_dir: str, job: Job) -> None:

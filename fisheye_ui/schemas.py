@@ -111,6 +111,10 @@ class TelemetryPayload(BaseModel):
     distance_offset: float = 0.0
     counts: List[FileCount]
     track_stats: List[FileTrackStats]
+    # Only ever set at upload time, from the user's *current* choice (see
+    # telemetry_upload) - never stored in the outbox - so switching from
+    # "contact" to "anonymous" can't leave an email queued to be sent.
+    contact: Optional["TelemetryContact"] = None
 
 
 class TelemetryContact(BaseModel):
@@ -150,3 +154,7 @@ class TelemetrySettingsRequest(TelemetrySettings):
     never something a client sets."""
 
     choice: TelemetryChoice
+
+
+# TelemetryPayload.contact refers to TelemetryContact, defined after it.
+TelemetryPayload.model_rebuild()

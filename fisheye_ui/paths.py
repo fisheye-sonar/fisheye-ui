@@ -37,3 +37,10 @@ SETTINGS_DIR = Path(
     os.environ.get("FISHEYE_UI_SETTINGS_DIR") or Path.home() / ".fisheye-ui"
 )
 TELEMETRY_SETTINGS_PATH = SETTINGS_DIR / "telemetry_settings.json"
+
+# Reports waiting to be uploaded, one <job_id>.json per finished job, and the
+# small state file that records when the last upload happened (see
+# telemetry_upload.py). Next to the settings for the same reason: they must
+# survive restarts.
+TELEMETRY_OUTBOX_DIR = SETTINGS_DIR / "telemetry_outbox"
+TELEMETRY_STATE_PATH = SETTINGS_DIR / "telemetry_state.json"

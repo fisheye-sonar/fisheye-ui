@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
-from fisheye_ui import telemetry_settings
+from fisheye_ui import telemetry_settings, telemetry_upload
+from fisheye_ui.enums import TelemetryChoice
 from fisheye_ui.schemas import TelemetrySettings, TelemetrySettingsRequest
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -20,6 +21,7 @@ async def put_telemetry_settings(request: TelemetrySettingsRequest):
 
     Contact details are dropped unless choice is "contact" (see
     TelemetrySettings), so the response can differ from the request.
+    Opting out also deletes any reports still waiting to be uploaded.
     """
     settings = TelemetrySettings.model_validate(request.model_dump())
     try:
@@ -33,4 +35,6 @@ async def put_telemetry_settings(request: TelemetrySettingsRequest):
             status_code=500,
             detail="Couldn't save your usage reporting choice. Please try again.",
         )
+    if settings.choice == TelemetryChoice.OFF:
+        telemetry_upload.clear_outbox()
     return settings

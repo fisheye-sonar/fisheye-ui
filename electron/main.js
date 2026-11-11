@@ -7,6 +7,12 @@ const treeKill = require('tree-kill')
 const { checkForUpdate } = require('./updateCheck')
 const { isGpuRuntimeInstalled, runDownloadSetup, runFileSetup } = require('./gpuSetup')
 
+// Where installed apps send opt-in telemetry reports: the Lambda function
+// URL from deploy/telemetry/README.md. Empty until that exists, in which
+// case the backend never sends anything. Installed apps keep whatever URL
+// they shipped with, so changing it only affects newer versions.
+const TELEMETRY_URL = ''
+
 // shell isn't reachable from the sandboxed preload script, so the renderer's
 // "Download" click is routed through here instead (see preload.js).
 ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
@@ -176,6 +182,7 @@ async function startBackend() {
       // update-check.json and logs/, rather than its ~/.fisheye-ui
       // fallback for running from the repo.
       FISHEYE_UI_SETTINGS_DIR: app.getPath('userData'),
+      ...(TELEMETRY_URL ? { FISHEYE_UI_TELEMETRY_URL: TELEMETRY_URL } : {}),
     },
     // The backend writes a relative "logs/" dir when a job runs. Without an
     // explicit cwd, a packaged/double-clicked .app inherits Electron's own
