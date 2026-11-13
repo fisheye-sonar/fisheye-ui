@@ -23,6 +23,16 @@ const OPTIONS = [
   },
 ]
 
+const PRIVACY_DOC_URL =
+  'https://github.com/fisheye-sonar/fisheye-ui/blob/main/docs/06-privacy/01-usage-reporting.md'
+
+// Inside Electron, open in the user's browser rather than a new app window.
+function openPrivacyDoc(event) {
+  if (!window.fisheyeElectron?.openExternal) return
+  event.preventDefault()
+  window.fisheyeElectron.openExternal(PRIVACY_DOC_URL)
+}
+
 const INPUT_CLASS =
   'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500'
 
@@ -128,6 +138,17 @@ export default function TelemetryDialog({ settings, onSaved, onClose }) {
               </p>
             </div>
           )}
+          <p>
+            <a
+              href={PRIVACY_DOC_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={openPrivacyDoc}
+              className="text-blue-600 hover:text-blue-700 underline"
+            >
+              Read the full privacy details
+            </a>
+          </p>
         </div>
 
         <fieldset className="space-y-3">

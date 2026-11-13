@@ -61,7 +61,10 @@ def isolated_dirs(tmp_path, monkeypatch):
         "TELEMETRY_STATE_PATH",
         tmp_path / "fisheye-ui-settings" / "telemetry_state.json",
     )
-    monkeypatch.delenv("FISHEYE_UI_TELEMETRY_URL", raising=False)
+    # Telemetry is off without a URL (see telemetry_settings.enabled), so
+    # tests get a placeholder one - nothing is ever sent to it.
+    monkeypatch.setenv("FISHEYE_UI_TELEMETRY_URL", "https://telemetry.example/")
+    monkeypatch.delenv("FISHEYE_UI_TELEMETRY_ENABLED", raising=False)
     return {"jobs_dir": jobs_dir, "upload_dir": upload_dir}
 
 

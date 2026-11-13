@@ -87,6 +87,12 @@ class TestTelemetryDisabled:
         monkeypatch.delenv("FISHEYE_UI_TELEMETRY_ENABLED", raising=False)
         assert telemetry_settings.enabled() is True
 
+    def test_disabled_without_url(self, monkeypatch):
+        """Running from the repo, or anyone else's build of the app, has no
+        URL - users there must never be asked to opt in."""
+        monkeypatch.delenv("FISHEYE_UI_TELEMETRY_URL")
+        assert telemetry_settings.enabled() is False
+
     def test_disabled_with_zero(self, monkeypatch):
         monkeypatch.setenv("FISHEYE_UI_TELEMETRY_ENABLED", "0")
         assert telemetry_settings.enabled() is False

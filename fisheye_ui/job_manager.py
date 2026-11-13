@@ -15,7 +15,7 @@ import structlog
 from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
-from fisheye_ui import telemetry_upload
+from fisheye_ui import __version__, telemetry_upload
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
 from fisheye_ui.schemas import FileCount, FileTrackStats, TelemetryPayload
@@ -486,14 +486,16 @@ def build_telemetry_payload(job: Job) -> TelemetryPayload:
     job_finished = next(
         (e for e in job.telemetry_events if e.get("event") == "job_finished"), {}
     )
-    platform_cfg = (job.config or {}).get("platform") or {}
+    # The frontend sends the device under platform.model (see SubmitForm.jsx).
+    model_cfg = ((job.config or {}).get("platform") or {}).get("model") or {}
 
     return TelemetryPayload(
         job_id=job.id,
+        ui_version=__version__,
         app_version=job_started.get("app_version"),
         detector_version=job_started.get("detector_version"),
         os=sys.platform,
-        device=platform_cfg.get("device"),
+        device=model_cfg.get("device"),
         status=job.status,
         error_type=job.error_type,
         started_at=job.started_at,

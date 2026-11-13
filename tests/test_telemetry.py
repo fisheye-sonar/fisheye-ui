@@ -1,6 +1,7 @@
 import json
 from datetime import datetime
 
+import fisheye_ui
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.job_manager import Job, _ProgressQueue, build_telemetry_payload
 
@@ -18,7 +19,7 @@ def _job(**overrides):
             "export_options": ["summary_csv"],
             "upstream_direction": "left",
             "distance_offset": 1.5,
-            "platform": {"device": "mps"},
+            "platform": {"model": {"type": "yolov5", "device": "mps"}},
         },
         results=[
             {
@@ -157,6 +158,16 @@ class TestBuildTelemetryPayload:
 
         assert payload.file_count == 2
         assert payload.counts == []  # no file_index on either row
+
+    def test_ui_version_is_fisheye_ui_version(self):
+        payload = build_telemetry_payload(_job())
+
+        assert payload.ui_version == fisheye_ui.__version__
+
+    def test_device_from_platform_model_config(self):
+        payload = build_telemetry_payload(_job())
+
+        assert payload.device == "mps"
 
     def test_duration_computed_from_timestamps(self):
         job = _job()

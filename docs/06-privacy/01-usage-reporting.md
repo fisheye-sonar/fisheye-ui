@@ -26,7 +26,8 @@ One summary per job, containing:
 **About the job**
 - A random ID for the job. It's made up fresh for each job and isn't tied to
   you or your computer.
-- FishEye app version and model version
+- Versions of the FishEye app, the fisheye detection software it runs, and the
+  model
 - Operating system (for example, macOS or Windows)
 - Whether the job ran on CPU or GPU
 - Whether the job finished, failed, or was cancelled, and if it failed, the
@@ -58,8 +59,9 @@ anonymously:
 {
   "schema_version": 1,
   "job_id": "3f1c9a52-8e4b-4d7a-9c21-6b0e5f2d8a17",
-  "app_version": "1.0.1",
-  "detector_version": "yolov5m-v0",
+  "ui_version": "1.0.1",
+  "app_version": "1.1.0",
+  "detector_version": "cfc_detect_yolov5m_v0",
   "os": "darwin",
   "device": "mps",
   "status": "completed",

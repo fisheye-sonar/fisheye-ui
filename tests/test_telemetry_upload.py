@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,6 +14,9 @@ from fisheye_ui.job_manager import JobManager
 from fisheye_ui.schemas import TelemetryContact, TelemetryPayload, TelemetrySettings
 
 URL = "https://telemetry.example/"
+LAMBDA_SOURCE = (
+    Path(__file__).parents[1] / "deploy" / "telemetry" / "lambda_function.py"
+)
 NOW = datetime(2026, 11, 9, 12, 0, 0)
 CONTACT = TelemetryContact(
     name="Jane Doe", institution="Caltech", email="jane@example.edu"
@@ -178,8 +182,10 @@ class TestUploadIfDue:
             telemetry_upload.enqueue(_payload(job_id=job_id))
 
     def test_nothing_sent_without_url(self, receiver, monkeypatch):
-        monkeypatch.delenv("FISHEYE_UI_TELEMETRY_URL")
+        """Reports queued by a build that had a URL are never sent by one
+        that doesn't."""
         self._queue()
+        monkeypatch.delenv("FISHEYE_UI_TELEMETRY_URL")
 
         assert telemetry_upload.upload_if_due(receiver.client(), NOW) is False
         assert receiver.batches == []
@@ -324,6 +330,23 @@ class TestUploadIfDue:
 
         assert [len(batch) for batch in receiver.batches] == [2, 2]
         assert _outbox() == []
+
+    def test_batches_split_by_report_count(self, receiver, monkeypatch):
+        self._queue(*[f"00000000-0000-4000-8000-00000000000{i}" for i in range(5)])
+        monkeypatch.setattr(telemetry_upload, "MAX_BATCH_REPORTS", 2)
+
+        telemetry_upload.upload_if_due(receiver.client(), NOW)
+
+        assert [len(batch) for batch in receiver.batches] == [2, 2, 1]
+        assert _outbox() == []
+
+    def test_batch_report_cap_matches_receiver(self):
+        # Read from source rather than imported: the Lambda needs BUCKET_NAME
+        # and AWS credentials at import time.
+        match = re.search(
+            r"^MAX_REPORTS_PER_BATCH = (\d+)$", LAMBDA_SOURCE.read_text(), re.M
+        )
+        assert telemetry_upload.MAX_BATCH_REPORTS == int(match.group(1))
 
     def test_opting_out_mid_upload_stops_remaining_batches(self, receiver, monkeypatch):
         self._queue(*[f"00000000-0000-4000-8000-00000000000{i}" for i in range(4)])

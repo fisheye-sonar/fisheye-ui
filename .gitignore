@@ -85,3 +85,6 @@ release
 *.njsproj
 *.sln
 *.sw?
+
+# Usage reporting URL, written at build time by electron/scripts/write-telemetry-config.js
+electron/telemetry-config.json

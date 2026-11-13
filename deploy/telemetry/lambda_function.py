@@ -38,6 +38,11 @@ BUCKET_NAME = os.environ["BUCKET_NAME"]
 # files while staying well under the function URL's 6 MB request limit.
 MAX_BODY_BYTES = 1024 * 1024
 
+# Each report is one S3 write, so this caps how many writes a single request
+# can trigger - without it, one 1 MB request of tiny junk reports could cause
+# thousands. Must match MAX_BATCH_REPORTS in fisheye_ui/telemetry_upload.py.
+MAX_REPORTS_PER_BATCH = 100
+
 SUPPORTED_SCHEMA_VERSIONS = {1}
 
 REQUIRED_FIELDS = (
@@ -133,5 +138,7 @@ def lambda_handler(event, context):
         return _response(400, {"error": "invalid JSON"})
     if not isinstance(batch, dict) or not isinstance(batch.get("reports"), list):
         return _response(400, {"error": 'expected {"reports": [...]}'})
+    if len(batch["reports"]) > MAX_REPORTS_PER_BATCH:
+        return _response(413, {"error": "too many reports in batch"})
 
     return _response(200, {"results": [_store(report) for report in batch["reports"]]})

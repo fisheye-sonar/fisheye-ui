@@ -32,6 +32,35 @@ npm install        # first time only
 npm start
 ```
 
+## Usage reporting URL
+
+Official release builds need the telemetry receiver's Lambda function URL
+(find it in the AWS console: Lambda → the telemetry function →
+Configuration → Function URL; setup in `deploy/telemetry/README.md`).
+`npm run build:mac` / `build:win` bake it into `telemetry-config.json`
+inside the app. It's deliberately not in the repo, so other people's builds
+never report to the FishEye team's receiver.
+
+Keep it in a git-ignored `electron/.env.release`, which the build reads
+automatically:
+
+```bash
+# electron/.env.release
+export FISHEYE_TELEMETRY_URL=https://<function-url>/
+```
+
+The build prints `Usage reporting URL: ...` when it found one. Without one
+it still succeeds, but prints a warning and that release has usage
+reporting turned off entirely (no opt-in dialog).
+
+- **Build without usage reporting** (e.g. a test build for someone outside
+  the team): `FISHEYE_TELEMETRY_URL= npm run build:mac`. An explicitly set
+  variable, even an empty one, overrides `.env.release`.
+- **Try usage reporting in dev:** `FISHEYE_TELEMETRY_URL=https://<function-url>/ npm start`,
+  or set `FISHEYE_UI_TELEMETRY_URL` when running the backend directly with
+  `poetry run fisheye-ui`. Real reports from your test jobs then reach the
+  bucket.
+
 ## Building the final app (macOS)
 
 Produces a signed-nothing, double-clickable

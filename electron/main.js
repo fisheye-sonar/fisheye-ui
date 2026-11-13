@@ -7,11 +7,22 @@ const treeKill = require('tree-kill')
 const { checkForUpdate } = require('./updateCheck')
 const { isGpuRuntimeInstalled, runDownloadSetup, runFileSetup } = require('./gpuSetup')
 
-// Where installed apps send opt-in telemetry reports: the Lambda function
-// URL from deploy/telemetry/README.md. Empty until that exists, in which
-// case the backend never sends anything. Installed apps keep whatever URL
-// they shipped with, so changing it only affects newer versions.
-const TELEMETRY_URL = ''
+// Where installed apps send opt-in usage reports: the Lambda function URL
+// from deploy/telemetry/README.md, baked in at build time by
+// scripts/write-telemetry-config.js. Empty (any build without
+// FISHEYE_TELEMETRY_URL, or `npm start` before a build) turns usage
+// reporting off entirely. FISHEYE_TELEMETRY_URL also overrides it at
+// runtime, for trying it out with `npm start`. Installed apps keep whatever
+// URL they shipped with, so changing it only affects newer versions.
+function telemetryUrl() {
+  if (process.env.FISHEYE_TELEMETRY_URL) return process.env.FISHEYE_TELEMETRY_URL
+  try {
+    return require('./telemetry-config.json').url || ''
+  } catch {
+    return ''
+  }
+}
+const TELEMETRY_URL = telemetryUrl()
 
 // shell isn't reachable from the sandboxed preload script, so the renderer's
 // "Download" click is routed through here instead (see preload.js).

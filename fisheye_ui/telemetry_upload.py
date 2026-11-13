@@ -50,6 +50,9 @@ MAX_REPORT_AGE = timedelta(days=90)
 # deploy/telemetry/lambda_function.py). A single report bigger than this is
 # dropped rather than retried forever.
 MAX_BATCH_BYTES = 900 * 1024
+# The receiver rejects batches with more reports than this (it caps S3 writes
+# per request), so must match MAX_REPORTS_PER_BATCH in lambda_function.py.
+MAX_BATCH_REPORTS = 100
 
 REQUEST_TIMEOUT_SECONDS = 30
 
@@ -57,14 +60,6 @@ REQUEST_TIMEOUT_SECONDS = 30
 _upload_lock = threading.Lock()
 # Guards writes to the outbox dir and state file.
 _files_lock = threading.Lock()
-
-
-def telemetry_url() -> Optional[str]:
-    """Where reports are sent. Set by the Electron app for real installs;
-    unset when running from the repo, in which case nothing is ever sent
-    (reports still collect in the outbox, which is handy for inspecting
-    them)."""
-    return os.environ.get("FISHEYE_UI_TELEMETRY_URL") or None
 
 
 def _opted_in(settings) -> bool:
@@ -166,13 +161,16 @@ def _retry_delay(failures: int, server_retry_after: Optional[float]) -> timedelt
 
 def _batches(reports: List[Tuple]) -> List[List[Tuple]]:
     """Group (path, report) pairs into batches whose JSON stays under
-    MAX_BATCH_BYTES. Reports too big to fit even alone get their own
+    MAX_BATCH_BYTES, with at most MAX_BATCH_REPORTS reports each. Reports
+    too big to fit even alone get their own
     single-report batch, which the server will reject (413) and which is
     then dropped."""
     batches, current, current_size = [], [], 0
     for path, report in reports:
         size = len(json.dumps(report).encode("utf-8"))
-        if current and current_size + size > MAX_BATCH_BYTES:
+        if current and (
+            current_size + size > MAX_BATCH_BYTES or len(current) >= MAX_BATCH_REPORTS
+        ):
             batches.append(current)
             current, current_size = [], 0
         current.append((path, report))
@@ -239,7 +237,7 @@ def upload_if_due(
         return False  # another check is already uploading
     try:
         now = now or datetime.utcnow()
-        url = telemetry_url()
+        url = telemetry_settings.telemetry_url()
         settings = telemetry_settings.load()
         if not url or not _opted_in(settings):
             return False

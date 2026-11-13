@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+from typing import Optional
 
 import structlog
 from pydantic import ValidationError
@@ -15,16 +16,30 @@ logger = structlog.get_logger()
 _lock = threading.Lock()
 
 
+def telemetry_url() -> Optional[str]:
+    """Where reports are sent. Passed in by the Electron app from the URL
+    baked in at build time (see electron/scripts/write-telemetry-config.js),
+    so only official release builds have one."""
+    return os.environ.get("FISHEYE_UI_TELEMETRY_URL") or None
+
+
 def enabled() -> bool:
     """Whether opt-in telemetry is available on this deployment at all.
 
-    On by default (desktop). Turned off with FISHEYE_UI_TELEMETRY_ENABLED=0
-    on the cloud GPU worker (see deploy/gpu-worker/fisheye-ui.service):
-    settings here are one per machine, so on a shared server one user's
-    choice - and contact details - would apply to, and be readable by,
-    every other user. Per-user cloud telemetry is a separate design.
+    Off without a telemetry URL: nothing could ever be sent, so users aren't
+    asked to opt in. That covers running from the repo and anyone else's
+    build of the app, which then never reports to the FishEye team.
+
+    Also turned off with FISHEYE_UI_TELEMETRY_ENABLED=0 on the cloud GPU
+    worker (see deploy/gpu-worker/fisheye-ui.service): settings here are one
+    per machine, so on a shared server one user's choice - and contact
+    details - would apply to, and be readable by, every other user.
+    Per-user cloud telemetry is a separate design.
     """
-    return os.environ.get("FISHEYE_UI_TELEMETRY_ENABLED", "1") != "0"
+    return (
+        telemetry_url() is not None
+        and os.environ.get("FISHEYE_UI_TELEMETRY_ENABLED", "1") != "0"
+    )
 
 
 class TelemetryDisabledError(RuntimeError):

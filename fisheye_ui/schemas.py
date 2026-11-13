@@ -90,6 +90,9 @@ class TelemetryPayload(BaseModel):
 
     schema_version: int = 1
     job_id: str
+    # FishEye UI (desktop app) version; app_version below is the fisheye
+    # package's own, from its job_started event.
+    ui_version: Optional[str] = None
     app_version: Optional[str] = None
     detector_version: Optional[str] = None
     os: str
