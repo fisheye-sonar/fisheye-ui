@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fisheye_ui import job_manager as job_manager_module
+from fisheye_ui import telemetry_settings as telemetry_settings_module
+from fisheye_ui import telemetry_upload as telemetry_upload_module
 from fisheye_ui import usage as usage_module
 from fisheye_ui.app import app
 from fisheye_ui.enums import JobStatus
@@ -44,6 +46,25 @@ def isolated_dirs(tmp_path, monkeypatch):
     monkeypatch.setattr(files_module, "JOBS_DIR", jobs_dir)
     monkeypatch.setattr(files_module, "UPLOAD_DIR", upload_dir)
     monkeypatch.setattr(usage_module, "USAGE_PATH", tmp_path / "fisheye-ui-usage.json")
+    monkeypatch.setattr(
+        telemetry_settings_module,
+        "TELEMETRY_SETTINGS_PATH",
+        tmp_path / "fisheye-ui-settings" / "telemetry_settings.json",
+    )
+    monkeypatch.setattr(
+        telemetry_upload_module,
+        "TELEMETRY_OUTBOX_DIR",
+        tmp_path / "fisheye-ui-settings" / "telemetry_outbox",
+    )
+    monkeypatch.setattr(
+        telemetry_upload_module,
+        "TELEMETRY_STATE_PATH",
+        tmp_path / "fisheye-ui-settings" / "telemetry_state.json",
+    )
+    # Telemetry is off without a URL (see telemetry_settings.enabled), so
+    # tests get a placeholder one - nothing is ever sent to it.
+    monkeypatch.setenv("FISHEYE_UI_TELEMETRY_URL", "https://telemetry.example/")
+    monkeypatch.delenv("FISHEYE_UI_TELEMETRY_ENABLED", raising=False)
     return {"jobs_dir": jobs_dir, "upload_dir": upload_dir}
 
 

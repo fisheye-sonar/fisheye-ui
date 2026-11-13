@@ -5,6 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "prebuild:mac": "node scripts/write-telemetry-config.js",
+    "prebuild:win": "node scripts/write-telemetry-config.js",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win"
   },
@@ -35,6 +37,7 @@
       "setup.html",
       "setup.js",
       "resources/gpu-runtime.manifest.json",
+      "telemetry-config.json",
       "package.json",
       "node_modules/**/*"
     ],

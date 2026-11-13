@@ -33,6 +33,11 @@ Environment=FISHEYE_UI_MAX_CONCURRENT_JOBS=2
 # pre-existing shared Caddy credential to keep it unlimited.
 Environment=FISHEYE_UI_UNLIMITED_USER=REPLACE_ME
 Environment=FISHEYE_UI_MAX_JOBS_PER_USER=10
+# Opt-in telemetry is desktop-only for now (see
+# fisheye_ui/telemetry_settings.py's enabled()): its settings are one per
+# machine, so on this shared server one user's choice and contact details
+# would apply to everyone. Keep off until per-user cloud telemetry exists.
+Environment=FISHEYE_UI_TELEMETRY_ENABLED=0
 ExecStart=/home/ubuntu/.local/bin/poetry run fisheye-ui
 Restart=on-failure
 RestartSec=5

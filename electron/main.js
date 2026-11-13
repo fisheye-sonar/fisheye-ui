@@ -7,6 +7,23 @@ const treeKill = require('tree-kill')
 const { checkForUpdate } = require('./updateCheck')
 const { isGpuRuntimeInstalled, runDownloadSetup, runFileSetup } = require('./gpuSetup')
 
+// Where installed apps send opt-in usage reports: the Lambda function URL
+// from deploy/telemetry/README.md, baked in at build time by
+// scripts/write-telemetry-config.js. Empty (any build without
+// FISHEYE_TELEMETRY_URL, or `npm start` before a build) turns usage
+// reporting off entirely. FISHEYE_TELEMETRY_URL also overrides it at
+// runtime, for trying it out with `npm start`. Installed apps keep whatever
+// URL they shipped with, so changing it only affects newer versions.
+function telemetryUrl() {
+  if (process.env.FISHEYE_TELEMETRY_URL) return process.env.FISHEYE_TELEMETRY_URL
+  try {
+    return require('./telemetry-config.json').url || ''
+  } catch {
+    return ''
+  }
+}
+const TELEMETRY_URL = telemetryUrl()
+
 // shell isn't reachable from the sandboxed preload script, so the renderer's
 // "Download" click is routed through here instead (see preload.js).
 ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
@@ -167,7 +184,17 @@ function waitForHealth(port, timeoutMs = 120000) {
 async function startBackend() {
   const port = await getFreePort()
   backendProcess = spawn(backendPath(), [], {
-    env: { ...process.env, FISHEYE_UI_NO_BROWSER: '1', PORT: String(port) },
+    env: {
+      ...process.env,
+      FISHEYE_UI_NO_BROWSER: '1',
+      PORT: String(port),
+      // Keep the backend's persisted user settings (e.g. the telemetry
+      // opt-in choice) in the same per-OS app data folder as
+      // update-check.json and logs/, rather than its ~/.fisheye-ui
+      // fallback for running from the repo.
+      FISHEYE_UI_SETTINGS_DIR: app.getPath('userData'),
+      ...(TELEMETRY_URL ? { FISHEYE_UI_TELEMETRY_URL: TELEMETRY_URL } : {}),
+    },
     // The backend writes a relative "logs/" dir when a job runs. Without an
     // explicit cwd, a packaged/double-clicked .app inherits Electron's own
     // working directory — typically "/" — where that write fails with

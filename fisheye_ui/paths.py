@@ -27,3 +27,20 @@ JOBS_DIR = UPLOAD_DIR.parent / "fisheye-ui-jobs"
 # JOBS_DIR so counts survive a GPU worker stop/start cycle - counts are meant
 # to persist across sessions, not reset on restart.
 USAGE_PATH = UPLOAD_DIR.parent / "fisheye-ui-usage.json"
+
+# The user's opt-in telemetry choice (see telemetry_settings.py). Unlike the
+# paths above this deliberately does NOT default to the temp dir - a consent
+# choice that got swept or wiped on reboot would re-prompt the user, or worse
+# be lost. Lives in the user's home dir so it survives restarts and app
+# updates; override with FISHEYE_UI_SETTINGS_DIR.
+SETTINGS_DIR = Path(
+    os.environ.get("FISHEYE_UI_SETTINGS_DIR") or Path.home() / ".fisheye-ui"
+)
+TELEMETRY_SETTINGS_PATH = SETTINGS_DIR / "telemetry_settings.json"
+
+# Reports waiting to be uploaded, one <job_id>.json per finished job, and the
+# small state file that records when the last upload happened (see
+# telemetry_upload.py). Next to the settings for the same reason: they must
+# survive restarts.
+TELEMETRY_OUTBOX_DIR = SETTINGS_DIR / "telemetry_outbox"
+TELEMETRY_STATE_PATH = SETTINGS_DIR / "telemetry_state.json"

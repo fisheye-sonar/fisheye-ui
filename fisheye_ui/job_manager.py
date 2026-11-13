@@ -4,6 +4,7 @@ import glob
 import json
 import os
 import queue as _queue
+import sys
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -14,8 +15,10 @@ import structlog
 from fisheye.common.system import generate_job_id
 from omegaconf import DictConfig, OmegaConf
 
+from fisheye_ui import __version__, telemetry_upload
 from fisheye_ui.enums import JobStatus
 from fisheye_ui.paths import JOBS_DIR, UPLOAD_DIR
+from fisheye_ui.schemas import FileCount, FileTrackStats, TelemetryPayload
 
 logger = structlog.get_logger()
 
@@ -24,6 +27,21 @@ logger = structlog.get_logger()
 # GPU typically performs better with serialized execution. Override with
 # FISHEYE_UI_MAX_CONCURRENT_JOBS.
 MAX_CONCURRENT_JOBS = int(os.environ.get("FISHEYE_UI_MAX_CONCURRENT_JOBS", "1"))
+
+# Log events (and, per event, the only fields) captured into
+# Job.telemetry_events. Fields are whitelisted rather than the whole event
+_TELEMETRY_FIELDS: Dict[str, tuple] = {
+    "job_started": ("app_version", "detector_version"),
+    "job_finished": ("duration_sec",),
+    "processed_file_stats": (
+        "file_index",
+        "num_tracks",
+        "num_counts",
+        "avg_bbox_width_meters",
+        "median_bbox_width_meters",
+        "std_bbox_width_meters",
+    ),
+}
 
 
 def _raise_in_thread(tid: int, exc_type: type) -> None:
@@ -36,6 +54,35 @@ def _raise_in_thread(tid: int, exc_type: type) -> None:
         ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(tid), None)
 
 
+class _ProgressQueue(_queue.Queue):
+    """A job's progress queue that also records whitelisted telemetry events.
+
+    Captured here rather than in a structlog processor because run_job()
+    calls fisheye's setup_logging(), which replaces the whole processor
+    chain (including fisheye_ui.logging's router). fisheye's own
+    _route_to_progress_queue survives that and puts every event onto this
+    queue, so this is the one hook that sees every event for the job.
+    """
+
+    def __init__(self, telemetry_events: List[Dict]) -> None:
+        super().__init__()
+        self._telemetry_events = telemetry_events
+
+    def put(
+        self, item: Any, block: bool = True, timeout: Optional[float] = None
+    ) -> None:
+        if isinstance(item, dict):
+            fields = _TELEMETRY_FIELDS.get(item.get("event"))
+            if fields is not None:
+                self._telemetry_events.append(
+                    {
+                        "event": item["event"],
+                        **{k: item[k] for k in fields if k in item},
+                    }
+                )
+        super().put(item, block, timeout)
+
+
 @dataclass
 class Job:
     id: str
@@ -45,8 +92,23 @@ class Job:
     output_dir: Optional[str] = None
     results: Optional[List] = None
     error: Optional[str] = None
+    # Exception class name only (e.g. "FileNotFoundError"), set alongside
+    # `error` in _run()'s except block. Kept separate from `error` because
+    # the opt-in telemetry payload (see build_telemetry_payload) must never
+    # send the full message - it frequently embeds the failing file's path.
+    error_type: Optional[str] = None
     finished_at: Optional[datetime] = None
+    # When the job left the queue and actually began running (created_at
+    # is submission time, so it includes any wait for a free slot). Only
+    # used for the telemetry payload's duration, so not persisted.
+    started_at: Optional[datetime] = None
     progress_queue: Optional[Any] = field(default=None, repr=False)
+    # Whitelisted structlog events captured during the run (job_started,
+    # job_finished, processed_file_stats) - see _ProgressQueue and
+    # _TELEMETRY_FIELDS.
+    # Used only to build the opt-in telemetry payload; not persisted, not
+    # shown in the UI.
+    telemetry_events: List[Dict] = field(default_factory=list, repr=False)
     _thread_id: Optional[int] = field(default=None, repr=False)
 
 
@@ -105,8 +167,8 @@ class JobManager:
             created_at=datetime.utcnow(),
             config=config_dict,
             output_dir=config_dict.get("output_dir"),
-            progress_queue=_queue.Queue(),
         )
+        job.progress_queue = _ProgressQueue(job.telemetry_events)
         with self._lock:
             self._jobs[job_id] = job
         self._persist(job)
@@ -284,6 +346,7 @@ class JobManager:
                     return
 
                 job.status = JobStatus.RUNNING
+                job.started_at = datetime.utcnow()
                 self._persist(job)
                 _write_params_json(output_dir, job)
                 try:
@@ -293,6 +356,7 @@ class JobManager:
                     return  # cancelled via _raise_in_thread
                 except Exception as e:
                     job.error = str(e)
+                    job.error_type = type(e).__name__
                     job.status = JobStatus.FAILED
                     job.finished_at = datetime.utcnow()
                     self._persist(job)
@@ -311,6 +375,24 @@ class JobManager:
                 self._persist(job)
         finally:
             _cleanup_upload_input(job)
+            _enqueue_telemetry(job)
+
+
+def _enqueue_telemetry(job: Job) -> None:
+    """Queue the job's opt-in telemetry report for the next daily upload
+    (telemetry_upload.enqueue checks the user's choice). Only jobs that
+    actually started running are reported - one cancelled while still
+    queued has nothing worth sending. Never raises."""
+    if job.started_at is None or job.status not in (
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    ):
+        return
+    try:
+        telemetry_upload.enqueue(build_telemetry_payload(job))
+    except Exception:
+        logger.warning("telemetry_enqueue_failed", job_id=job.id)
 
 
 def _write_params_json(output_dir: str, job: Job) -> None:
@@ -351,6 +433,86 @@ def _read_summary_csv(output_dir: str, job_id: str) -> Optional[List[Dict]]:
         return None
     with open(matches[0], newline="") as f:
         return list(csv.DictReader(f))
+
+
+def build_telemetry_payload(job: Job) -> TelemetryPayload:
+    """Opt-in telemetry payload for a job.
+
+    Deliberately never reads job.config's input_path/output_dir, or any
+    filename field from job.results (e.g. summary CSV's Source.Name) -
+    see the telemetry privacy spec for what's excluded and why.
+
+    counts and track_stats are joined on file_index. If a source doesn't
+    carry a real file_index (an older `fisheye` without the upstream
+    per-file-key fix), that source's entries are left out entirely rather
+    than guessed at by row/event position (a wrong join is worse than a
+    missing one).
+    """
+    counts = []
+    for row in job.results or []:
+        file_index = row.get("file_index")
+        if file_index in (None, "", "nan"):
+            continue
+        counts.append(
+            FileCount(
+                file_index=int(float(file_index)),
+                absolute_up=int(float(row.get("absolute_up") or 0)),
+                absolute_down=int(float(row.get("absolute_down") or 0)),
+                net_count=int(float(row.get("net_count") or 0)),
+            )
+        )
+
+    track_stats = []
+    for event in job.telemetry_events:
+        if event.get("event") != "processed_file_stats":
+            continue
+        file_index = event.get("file_index")
+        if file_index is None:
+            continue
+        track_stats.append(
+            FileTrackStats(
+                file_index=file_index,
+                num_tracks=event.get("num_tracks", 0),
+                num_counts=event.get("num_counts", 0),
+                avg_bbox_width_meters=event.get("avg_bbox_width_meters"),
+                median_bbox_width_meters=event.get("median_bbox_width_meters"),
+                std_bbox_width_meters=event.get("std_bbox_width_meters"),
+            )
+        )
+
+    job_started = next(
+        (e for e in job.telemetry_events if e.get("event") == "job_started"), {}
+    )
+    job_finished = next(
+        (e for e in job.telemetry_events if e.get("event") == "job_finished"), {}
+    )
+    # The frontend sends the device under platform.model (see SubmitForm.jsx).
+    model_cfg = ((job.config or {}).get("platform") or {}).get("model") or {}
+
+    return TelemetryPayload(
+        job_id=job.id,
+        ui_version=__version__,
+        app_version=job_started.get("app_version"),
+        detector_version=job_started.get("detector_version"),
+        os=sys.platform,
+        device=model_cfg.get("device"),
+        status=job.status,
+        error_type=job.error_type,
+        started_at=job.started_at,
+        finished_at=job.finished_at,
+        duration_seconds=(
+            (job.finished_at - job.started_at).total_seconds()
+            if job.started_at and job.finished_at
+            else None
+        ),
+        processing_seconds=job_finished.get("duration_sec"),
+        file_count=len(job.results or []),
+        export_options=(job.config or {}).get("export_options", []),
+        upstream_direction=(job.config or {}).get("upstream_direction"),
+        distance_offset=(job.config or {}).get("distance_offset", 0.0),
+        counts=counts,
+        track_stats=track_stats,
+    )
 
 
 job_manager = JobManager()
